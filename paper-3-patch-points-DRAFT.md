@@ -187,3 +187,23 @@ backing unless the design names it separately.
 
 *DRAFT, prepared 2026-11-08. Nothing patched; no repository created. The
 list becomes final when Andrew rules on the decisions in item 4 above.*
+
+---
+
+## Addendum, 2026-11-08: the dye test (Andrew's method, experiment running)
+
+Question raised by point 1.1: `slab_alloc_node` is an internal inlined helper, so it leaves no standalone symbol in a compiled kernel. Does that make the slab allocations unfindable in compiled output? Andrew's proposed test: put a distinctive byte pattern (the dye) into the inline's body, compile, and see where the dye ends up. If the dye appears once per inlined expansion, the copies are findable in the binary even though no symbol names them.
+
+One refinement the idea needs: the dye must be emitted with `asm volatile` (a raw .byte sequence), because an ordinary data byte the compiler can prove unused would be optimized away before it ever reached the object file.
+
+Experiment as run: dye (16-byte pattern) in `slab_alloc_node` in mm/slub.c of Linux 6.12.116, plus a different control dye in the non-inline `kmem_cache_alloc_noprof`; build mm/slub.o only; count dye occurrences in the object, check `nm` for the helper's symbol, compare the inline-dye count against the source call-site count. Results to be appended when the run reports.
+
+**Results (measured 2026-11-08, x86_64 defconfig build of 6.12.116, mm/slub.o only; nothing booted).**
+
+- The helper's definition (mm/slub.c lines 4205-4206) is `static __fastpath_inline`; with CONFIG_SLUB=y and SLUB_TINY unset, that resolves to `__always_inline` for this build.
+- Source call sites of `slab_alloc_node` in mm/slub.c: 6.
+- `nm mm/slub.o` shows no `slab_alloc_node` symbol at all, as predicted.
+- The inline dye appears **8 times**, all in `.text`, and each copy sits inside a named exported wrapper: `__kmalloc_noprof`, `kmem_cache_alloc_node_noprof`, `__kmalloc_cache_node_noprof`, `__kmalloc_node_track_caller_noprof`, `__kmalloc_node_noprof`, `kmem_cache_alloc_lru_noprof`, `kmem_cache_alloc_noprof`, `__kmalloc_cache_noprof`.
+- The control dye in the non-inline `kmem_cache_alloc_noprof` appears **exactly once**. A baseline object built from an unmodified file in the same build (scripts/mod/empty.o) contains neither pattern.
+- The difference between 6 call sites and 8 copies is accounted for exactly: five call sites sit directly in exported wrappers (one copy each); the sixth sits inside `__do_kmalloc_node`, which is itself `__always_inline` and was expanded into three wrappers, yielding three copies. 5 + 3 = 8.
+- Verdict: the dye test works. The dye count measures final compiled expansions rather than source call sites, which is precisely the quantity the compiled-artifact audit needs, and every copy is attributable to the function that contains it.
