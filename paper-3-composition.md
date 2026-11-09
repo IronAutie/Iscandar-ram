@@ -187,6 +187,8 @@ Describe the translation layer, the patched centers, arena construction, and boo
 
 ### 8. Measurements
 
+Prediction requirement (Andrew, 2026-11-09): the exerciser emits a prediction sheet before it runs, computed from its fixed program alone: expected allocations and frees by size class, expected peak live pages, expected end state. The audit then prints predicted against actual, quantity by quantity, and every difference is either zero or explained in the text. The prediction is written before the run and not edited after it.
+
 Quantities to fix before the live run:
 
 - Boot completion

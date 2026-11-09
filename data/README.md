@@ -16,3 +16,4 @@ Not yet present:
   SHA-256 8b2a07f7926585c5bdaf28e3ea2da456a36c16222729478f53bcef28122d06d2).
   Sections point across to it.
 - The page-exercise ledger format, to be added when the exerciser is written.
+- The prediction sheet (Andrew, 2026-11-09): the exerciser's predicted counts, peak, and end state, written before the run; the audit's predicted-versus-actual table is built from it.
