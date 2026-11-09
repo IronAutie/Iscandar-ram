@@ -12,6 +12,10 @@
 - **Status:** Composition started 2026-11-08. No live patched-Debian result is claimed yet.
 - **Prior title superseded:** Debian's Voyage To Iscandar
 
+## Statement of the Problem (dictated by Andrew, 2026-11-08)
+
+> In the prior two papers, [1] and [2], we have devised a deterministic memory allocation and then shown it able to carry a typical boot-time page load on an embedded version of Debian. In this paper we demonstrate the techniques needed to associate the memory allocations with real random-access memory so that our example, Fubuki, can run actual applications at full speed.
+
 ## The paper in one paragraph
 
 The first Iscandar paper established the deterministic allocator theory at k=3. The second extended the theory to k=4 and replayed a complete recorded Debian boot through the allocator. This third paper takes the step from replay to live execution: identify the allocator centers in the Debian kernel, prepare a checked patch plan, boot Debian automatically into a controlled page-exercising application, and then run Debian with its allocation path redirected through Iscandar under QEMU.
