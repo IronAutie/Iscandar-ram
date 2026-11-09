@@ -115,6 +115,8 @@ Protocol:
 7. Reconcile the trace against the application ledger.
 8. Shut the guest down without manual intervention.
 
+Menu requirement (Andrew, 2026-11-09): the exerciser opens with a menu on the console and waits 10 seconds; on timeout it proceeds with the default, the standard exercise run. Menu shape as recorded: 1) standard exercise (the default), 2) extended exercise with churn, 3) ledger check only, 4) exit without exercising. The timeout matters because the automatic boot is unattended: the menu is for the attended rehearsals, and the default is what the evidence run uses.
+
 The first complete rehearsals can run in a stand-in guest on Muse's VM. The evidence run for the paper must use the ELBE-built Fubuki image on telesart, preserving the image lineage used for Paper 2.
 
 ### NOT YET RUN: the compiled-subset enumeration
