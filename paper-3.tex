@@ -117,6 +117,24 @@ associated with the real memory of a running system.
 
 It opens with the question the step answers: what can this source ask for, and give back? Then the method, a textual pass over the tree that takes the spellings as they come, headers and macros included. Then the findings, which the paper can print as the census itself, with the two facts that give the table its meaning: how skewed the counts are, and how much of the surface is dormant driver mass. Then the boundary, stated in the section rather than apologized for later: the sift reads text, counts comments, and cannot see inlining, which is exactly why later steps exist. And it closes with the hand-off: this census is the checklist the control trace will now be audited against.
 
+The census is the sift's product in durable form: a counted
+inventory of every occurrence the pass found, spelling by spelling,
+across the 59,969 source and header files of the tree, some ten
+million lines. Where the sift is the act of searching, the census
+is the record the search leaves behind, and it is the census, not
+the search, that the later steps consume: the reconciliation audits
+the trace against it, and the compiled subset is a pruning of it.
+The census began as a byproduct of earlier research, a planning
+count taken during the design work that preceded this paper, and is
+promoted here to evidence. Its headline figures are these: 77,577
+occurrences in the kmalloc family, and 16,559 more across the wider
+allocator surface. The distribution is sharply skewed. A single
+free spelling, \texttt{kfree}, accounts for 40,597 occurrences and
+\texttt{kzalloc} for 21,808, while \texttt{kmem\_cache\_alloc},
+the door the recorded boot used most, appears only 329 times in the
+source. Static abundance and dynamic importance, the census shows
+at a glance, are different quantities.
+
 \section{Patch Points}
 % Status: DRAFT list in paper-3-patch-points-DRAFT.md.
 
