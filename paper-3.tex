@@ -4,6 +4,7 @@
 \usepackage[T1]{fontenc}
 \usepackage{lmodern}
 \usepackage{hyperref}
+\usepackage{amsmath}
 
 \title{Debian to Iscandar: Full Steam Ahead!\\[0.6em] \large Installing the RAM}
 \author{Andrew Jonathan Fine}
@@ -126,14 +127,16 @@ the search, that the later steps consume: the reconciliation audits
 the trace against it, and the compiled subset is a pruning of it.
 The census began as a byproduct of earlier research, a planning
 count taken during the design work that preceded this paper, and is
-promoted here to evidence. Its headline figures are these: 77,577
+promoted here to evidence. \[
+\text{\parbox{0.92\textwidth}{Its headline figures are these: 77,577
 occurrences in the kmalloc family, and 16,559 more across the wider
 allocator surface. The distribution is sharply skewed. A single
 free spelling, \texttt{kfree}, accounts for 40,597 occurrences and
 \texttt{kzalloc} for 21,808, while \texttt{kmem\_cache\_alloc},
 the door the recorded boot used most, appears only 329 times in the
 source. Static abundance and dynamic importance, the census shows
-at a glance, are different quantities.
+at a glance, are different quantities.}}
+\]
 
 \section{Patch Points}
 % Status: DRAFT list in paper-3-patch-points-DRAFT.md.
