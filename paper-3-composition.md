@@ -147,6 +147,8 @@ No sentence in the paper may describe these as working until the corresponding r
 
 Move from the replay result to the live-system question. State what this paper attempts and what it does not attempt.
 
+Inserted 2026-11-08 at Andrew's direction: the overview list of our techniques, applied in order upon the source code making up Fubuki and upon the ISO under test. The order is: sift, control trace, reconciliation, compiled subset, dye, patch at the centers, translation layer, rebuilt ISO, automatic boot, audit.
+
 ### 2. Prior results
 
 Summarize the k=3 theory, the k=4 extension, and the Fubuki replay only as far as the live experiment depends on them.

@@ -36,7 +36,49 @@ To Jennifer: Everything. Always. Forever.
 In the prior two papers, [1] and [2], we have devised a deterministic memory allocation and then shown it able to carry a typical boot-time page load on an embedded version of Debian. In this paper we demonstrate the techniques needed to associate the memory allocations with real random-access memory so that our example, Fubuki, can run actual applications at full speed.
 
 \section{Introduction}
-% Status: outline only.
+% Status: technique overview inserted at Andrew's direction, 2026-11-08.
+% The build and live-run steps are IN PREPARATION or NOT YET RUN;
+% see paper-3-composition.md for the evidence label of each step.
+
+Our techniques are applied in the following order, upon the source
+code making up Fubuki and upon the built ISO that is the system
+under test:
+
+\begin{enumerate}
+\item \textbf{The sift.} The kernel source tree is searched
+textually for every spelling of the allocator calls, producing a
+census of what can be called.
+\item \textbf{The control trace.} A recorded boot of Fubuki,
+traced from the first instruction available to the tracer, shows
+which of those calls the exercised system actually made.
+\item \textbf{Reconciliation.} The trace is compared against the
+source, and the comparison names the allocator centers: the core
+functions the exercised calls pass through.
+\item \textbf{The compiled subset.} The source census is reduced
+to the subset that Fubuki's own kernel configuration compiles into
+the ISO, each patch point marked compiled in, modular, or absent.
+\item \textbf{The dye.} A distinctive byte pattern is inserted
+into an inlined center and the compiled artifact is scanned for it,
+so the inlined copies that leave no symbol are counted where they
+actually landed.
+\item \textbf{The patch at the centers.} Allocation and free are
+redirected at the centers named above, not at individual call
+sites. The vmalloc address reservation is left stock; its backing
+is the step replaced.
+\item \textbf{The translation layer.} Allocations are associated
+with real random-access memory: the coordinates the allocator
+issues are bound to actual frames, and the inverse binding is run
+on free.
+\item \textbf{The rebuilt ISO.} The image is rebuilt with the
+patched kernel and with a boot service that starts the test
+application without an interactive login.
+\item \textbf{The automatic boot.} The ISO under test is booted
+under QEMU and runs a deterministic page-exercising application at
+full speed, which writes its own ledger of requests and releases.
+\item \textbf{The audit.} The new trace is reconciled against the
+application ledger and against the allocator's own ledger, so that
+every event is accounted for by both sides.
+\end{enumerate}
 
 \section{Prior Results}
 % Status: SETTLED. Summarize Papers 1 and 2 only as far as the
