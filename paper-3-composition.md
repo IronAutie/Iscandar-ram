@@ -1,8 +1,11 @@
 # Composition ledger: Debian to Iscandar: Full Steam Ahead!
 
+## Subtitle: Installing the RAM
+
 ## Bibliographic record
 
 - **Title of record:** Debian to Iscandar: Full Steam Ahead!
+- **Subtitle:** Installing the RAM
 - **Author:** Andrew Jonathan Fine
 - **Dedication:** To Jennifer: Everything. Always. Forever.
 - **Repository:** Iscandar-ram

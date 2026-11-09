@@ -2,6 +2,8 @@
 
 Paper 3: *Debian to Iscandar: Full Steam Ahead!*
 
+Subtitle: *Installing the RAM*
+
 The first two papers replayed Debian's recorded allocations through Iscandar. This project takes the next step: a live Debian, its allocator calls redirected in real time to Iscandar, running on QEMU. Iscandar realized as the machine's memory: the allocator as RAM.
 
 The stack of repositories:
