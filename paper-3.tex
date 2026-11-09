@@ -139,14 +139,12 @@ the trace against it, and the compiled subset is a pruning of it.
 The census began as a byproduct of earlier research, a planning
 count taken during the design work that preceded this paper, and is
 promoted here to evidence. \[
-\text{\parbox{0.92\textwidth}{Its headline figures are these: 77,577
-occurrences in the kmalloc family, and 16,559 more across the wider
-allocator surface. The distribution is sharply skewed. A single
-free spelling, \texttt{kfree}, accounts for 40,597 occurrences and
-\texttt{kzalloc} for 21,808, while \texttt{kmem\_cache\_alloc},
-the door the recorded boot used most, appears only 329 times in the
-source. Static abundance and dynamic importance, the census shows
-at a glance, are different quantities.}}
+\text{\parbox{0.92\textwidth}{\begin{itemize}
+\item Its headline figures are these: 77,577 occurrences in the kmalloc family, and 16,559 more across the wider allocator surface.
+\item The distribution is sharply skewed.
+\item A single free spelling, \texttt{kfree}, accounts for 40,597 occurrences and \texttt{kzalloc} for 21,808, while \texttt{kmem\_cache\_alloc}, the door the recorded boot used most, appears only 329 times in the source.
+\item Static abundance and dynamic importance, the census shows at a glance, are different quantities.
+\end{itemize}}}
 \]
 
 \section{Patch Points}
