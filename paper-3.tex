@@ -81,8 +81,35 @@ every event is accounted for by both sides.
 \end{enumerate}
 
 \section{Prior Results}
-% Status: SETTLED. Summarize Papers 1 and 2 only as far as the
-% live experiment depends on them.
+% Status: SETTLED. One paragraph per paper, drafted 2026-11-08 at
+% Andrew's direction, awaiting his stet.
+
+In \cite{fine2026iscandar} we constructed a deterministic memory
+allocator by formal bijection: an extensible coordinate system is
+mapped onto a two dimensional memory map, so that allocation is the
+computation of coordinates for a run of exactly the requested size,
+and deallocation is the inverse map. At $k=3$ the map covers a cube
+of 32,768 sectors. The search is bounded by construction, the
+placement is exact fit, and a request that cannot be served is
+refused outright, leaving the decision with the caller. The result
+is an allocator whose behavior on any sequence of requests is fixed
+in advance by the sequence itself.
+
+In \cite{fine2026revisited} we extended the construction from
+$k=3$ to $k=4$, composing up to 32 cubes under a beam of 1,048,576
+sectors, and subjected the extension to a recorded load rather than
+a synthetic one. The complete boot of an embedded Debian system,
+Fubuki, was captured from the kernel's own tracepoints: 812,106
+allocations. Replayed through the $k=4$ allocator at a calibration
+of one sector to one page, the load was carried with no refusals
+and no anomalies, at a peak of 56,023 live objects; against a buddy
+system control replayed on the same trace, the peak memory granted
+differed by a fraction of one percent. The same load was afterwards
+carried in an arena of half the size, again with no refusals. Both
+results, however, were obtained with the allocator standing apart
+from the machine: in the first paper within its own pool, in the
+second over a recording. Its allocations had not yet been
+associated with the real memory of a running system.
 
 \section{Three Instruments}
 % Status: method settled; dye result measured.
