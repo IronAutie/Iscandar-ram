@@ -208,3 +208,9 @@ To be written only after the live run. No conclusion claim is drafted in advance
 ## Composition rule
 
 Every factual paragraph in the manuscript must point back to one of four labels in this ledger: SETTLED, MEASURED, IN PREPARATION, or NOT YET RUN. A paragraph without a label stays out of the manuscript.
+
+## Resumption point (Andrew wrapped up, evening of 2026-11-08)
+
+Manuscript state, identical in the repository and in Overleaf (5 pages, compiles clean): title and subtitle set; Statement of the Problem as dictated; Introduction with the ten techniques enumerated; Prior Results with one paragraph per paper; The Sift, and its Products (itemized opening); The Census, a Byproduct of Earlier Research (paragraph plus the math node with its four statistics itemized). Remaining sections are headings awaiting their turns, in step order: the control trace, the reconciliation, the compiled subset, the dye (results already measured), the patch at the centers (list already drafted), the translation layer, the rebuilt ISO, the automatic boot, the audit.
+
+Engineering still open, in his order of business: the compiled-subset enumeration can run on Muse's VM from the stock trixie config whenever he gives the word; the VM-side rehearsal of the automatic boot and page exerciser likewise. The telesart run on Fubuki herself comes last.
