@@ -134,6 +134,8 @@ Still to build:
 
 No sentence in the paper may describe these as working until the corresponding run has been measured.
 
+Proposed eleventh step (Andrew, 2026-11-09, tentative): Demonstration. After the audit, the patched Fubuki is shown running actual applications at full speed, which is the payoff the Statement of the Problem promises. If Andrew confirms it, the Introduction's enumeration grows to eleven steps and a Demonstration section follows the Audit, before the Discussion. Not yet in the manuscript.
+
 ## Decisions still required from Andrew
 
 1. Page allocator: substrate under the redirected centers, or bypassed inside a boot-carved Iscandar arena?
