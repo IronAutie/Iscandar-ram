@@ -210,7 +210,20 @@ promoted here to evidence.
 \end{itemize}
 
 \section{The Dye Test}
-% Status: MEASURED on Linux 6.12.116, mm/slub.o.
+% Status: MEASURED 2026-11-08 on Linux 6.12.116, mm/slub.o;
+% the artifact stands in data/ (dye-test-2026-11-08.md). The
+% experiment is the author's, proposed from his experience
+% debugging embedded systems. Laid down 2026-11-10 at Andrew's
+% direction, in the itemized style of the Sift section, after
+% the gates formulation was discussed and approved in chat.
+
+\begin{itemize}
+\item It opens with the question the step answers: can a gate be missing between the source and the executable? A gate is a function every request of some family must pass through, and this kernel carries whole pieces of its allocator as code in header files: the kmalloc dispatch is inline logic in a header, and the funnel itself, \texttt{slab\_alloc\_node}, is a static inline helper. Such code leaves no symbol in the compiled artifact, so a symbol audit can neither confirm the gate was compiled nor count the copies the compiler made of it.
+\item Then the method, an experiment proposed by the author from experience debugging embedded systems: a distinctive byte pattern, the dye, is planted in the gate's body in the source, emitted so the optimizer cannot delete it, a second pattern is planted as a control in an ordinary non-inlined function, the object is compiled, and the artifact is scanned for both patterns. A gate can be missing outright, the pattern nowhere, or missing in part, fewer copies than the source predicts, which would mean a path that reaches allocation without passing the gate.
+\item Then the findings, which locate anything missing down to the least particular, one expansion of one gate: the gate's dye appears 8 times in the object, all in \texttt{.text}, each copy inside a named exported wrapper, against 6 call sites in the source. The excess is accounted for exactly: five sites sit directly in exported wrappers, and the sixth sits inside an inline helper that was itself expanded into three wrappers, so 5 + 3 = 8. The control dye appears exactly once, and a baseline object built from an unmodified file contains neither pattern.
+\item Then the boundary, stated in the section rather than apologized for later: the run covers one object file of a defconfig build and boots nothing; its conditions, SLUB built in with SLUB\_TINY unset, are the conditions the compiled subset found in Fubuki's own configuration, so the reading transfers to her build class; and the audit is of the one inlined gate, the remaining centers being named symbols that a symbol audit reaches directly.
+\item And it closes with the hand-off: the compiled-artifact leg of the completeness evidence is in hand. The sift reads the source, the trace reads the running system, and the dye reads the artifact, and the three agree on the centers. What remains is the run itself, and the sections turn to it.
+\end{itemize}
 
 \section{Automatic Boot and the Page Exerciser}
 % Status: IN PREPARATION.
