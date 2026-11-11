@@ -149,6 +149,19 @@ promoted here to evidence.
 \item Static abundance and dynamic importance, the census shows at a glance, are different quantities.
 \end{itemize}
 
+\section{The Control Trace}
+% Status: MEASURED (the Fubuki boot trace). Laid down 2026-11-10
+% at Andrew's direction, in the itemized style of the Sift
+% section, from paper-3-control-trace-DRAFT.md.
+
+\begin{itemize}
+\item It opens with the question the step answers: what did this system actually ask for, and give back, in one complete boot?
+\item Then the method, a recorded boot of Fubuki traced from the first instruction available to the tracer, the kmem family armed from the start, the ledger counted inside the guest.
+\item Then the findings, which the paper can print as the trace ledger itself, with the two facts that give it its meaning: the buffer counters prove the count complete, and the size distribution shows a swarm of small objects, not a storm of large ones.
+\item Then the boundary, stated in the section rather than apologized for later: the trace reads the kmem family only, and cannot see the vmalloc or page families, which is exactly why later steps exist.
+\item And it closes with the hand-off: this ledger is the control the reconciliation will now audit against the census.
+\end{itemize}
+
 \section{Patch Points}
 % Status: DRAFT list in paper-3-patch-points-DRAFT.md.
 

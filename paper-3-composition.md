@@ -167,6 +167,8 @@ Andrew confirmed (2026-11-10): the Census section likewise stands in its itemize
 
 Andrew's decision (2026-11-10), deferred by his own instruction: a Control Trace section will be added to the manuscript before the Patch Points section. Not yet: do not insert it until he says so. The control trace draft file remains the source for it, still awaiting his stet.
 
+Executed (2026-11-10): at Andrew's direction the Control Trace section was laid down in the manuscript before Patch Points, in the itemized style of the Sift section, using the draft's five-item candidate opening verbatim. The trace statistics itemize is not yet in the section; the checked numbers stand in the draft file.
+
 Drift found and repaired (2026-11-10): Andrew had removed the Census section's math node in Overleaf (its indents differed from the rest of the paper), leaving the statistics in a plain itemize; the repo copy still carried the display block. Checked in Overleaf at Andrew's direction, then the repo copy was synced to the Overleaf form at his go. Consequence for the control trace draft: its open question about a math node for the trace statistics is settled by this precedent. Trace statistics take a plain itemize, no math node.
 
 ### 3a. Three instruments (superseded grouping)
