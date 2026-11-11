@@ -165,6 +165,8 @@ Andrew's ruling (2026-11-10): the Sift section stands as its five-item outline. 
 
 Andrew confirmed (2026-11-10): the Census section likewise stands in its itemized form, paragraph plus the math node with its statistics itemized, and is in the paper as it stands.
 
+Andrew's decision (2026-11-10), deferred by his own instruction: a Control Trace section will be added to the manuscript before the Patch Points section. Not yet: do not insert it until he says so. The control trace draft file remains the source for it, still awaiting his stet.
+
 ### 3a. Three instruments (superseded grouping)
 
 Present the completeness method:
