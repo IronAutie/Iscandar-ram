@@ -267,7 +267,17 @@ promoted here to evidence.
 % Status: quantities to be fixed before the live run.
 
 \section{Discussion}
-% Status: outline only.
+% Status: criterion fixed in advance (2026-11-10); verdict left blank until the live run is measured.
+
+\begin{itemize}
+\item It opens by fixing the criterion in advance, before any run exists to be judged: the main criterion is whether this is a direct replacement, and whether it runs without a panic.
+\item Then it defines direct replacement strictly: same kernel, same configuration, same boot, same workload, the allocators exchanged at the centers and nothing else altered to make the exchange survivable. Any exemption, if one is forced on us, is named, and the claim shrinks to fit it.
+\item Then it fixes what the replacement is: the C transcription of the engine, not the Python model. The Python code serves only to generate the oracle outputs against which the C is admitted; no Python runs in the serving arrangement. A run served by the Python model would therefore not meet the direct replacement criterion, whatever its other results.
+\item Then the second half: the patched system boots unattended, reaches the finish step, the exerciser completes, the evidence exports, and the guest shuts down clean, no panic, no oops, no invariant violation. A panic ends the claim for that run outright; it is not averaged into anything.
+\item Then the subordinate quantities, placed where they belong: speed and paging coverage are reported in the Measurements and discussed here only as record, and either can affect the verdict only by contributing to a panic. The paper does not grade the run on them.
+\item Then what a pass would mean, stated modestly in advance: the claim of the first two papers, support by replay, would become support in place, for this kernel, this configuration, and this workload, and no wider.
+\item And it closes with the verdict left blank, deliberately: this section will be completed from the run's record, and not before.
+\end{itemize}
 
 \section{Conclusion}
 % Status: NOT YET RUN. To be written after the live measurements.
