@@ -5,6 +5,7 @@ can be recreated from the repository. Status is stated per artifact.
 
 - `census-2026-11-07.md` — the sift census (measured). Points from: The Census.
 - `control-trace-2026-11-03.md` — the control trace ledger (measured): event counts, completeness counters, size distribution, and the trace's location and hashes. The raw trace itself is not duplicated here; see the pointer in that file. Points from: The Control Trace.
+- `compiled-subset-2026-11-10.md` — the compiled-subset enumeration (measured): every patch point marked compiled in, modular, or absent against Fubuki's 6.12.113 configuration, with gating evidence from the 6.12.116 Makefiles. Points from: The Compiled Subset.
 - `dye-test-2026-11-08.md` — the dye protocol and results (measured). Points from: The Dye.
 - `../paper-3-patch-points-DRAFT.md` — the patch-point list (draft). Points from: Patch Points.
 
@@ -22,7 +23,11 @@ can be recreated from the repository. Status is stated per artifact.
   telesart artifact itself. Points from: The Compiled Subset.
 
 Not yet present:
-- The rerunnable sift and enumeration scripts, to be added with that run.
+- The rerunnable sift script, to be added when the sift is next
+  rerun. (The compiled-subset enumeration of 2026-11-10 was a
+  Makefile-and-config reading, done by hand and recorded in
+  `compiled-subset-2026-11-10.md`; no script was used or is
+  owed for it.)
 - The Fubuki boot trace is not duplicated here: it lives in the
   iscandar-k4 repository (data/telezart-trace-boot-complete-2026-11-03.txt.gz,
   SHA-256 8b2a07f7926585c5bdaf28e3ea2da456a36c16222729478f53bcef28122d06d2).

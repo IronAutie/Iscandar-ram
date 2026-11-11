@@ -119,9 +119,9 @@ Menu requirement (Andrew, 2026-11-09): the exerciser opens with a menu on the co
 
 The first complete rehearsals can run in a stand-in guest on Muse's VM. The evidence run for the paper must use the ELBE-built Fubuki image on telesart, preserving the image lineage used for Paper 2.
 
-### NOT YET RUN: the compiled-subset enumeration
+### MEASURED: the compiled-subset enumeration (run 2026-11-10)
 
-The stock Debian configuration for Linux 6.12.113+deb13 is obtainable from the published trixie package. The enumeration will mark every patch point as compiled in, modular, or absent for Fubuki's kernel. No telesart sitting is required for this step.
+Run at Andrew's direction, on his order-of-execution ruling: the compiled subset comes before the dye in the evidence chain, because which wrappers exist in Fubuki's build is a configuration question. Method: each patch point mapped to its gating CONFIG in the 6.12.116 Makefiles, the symbols read from Fubuki's 6.12.113 stock config (fetched from the trixie package the same day). Artifact: `data/compiled-subset-2026-11-10.md`. Headline: every first-ring center is compiled in; nothing in the set is modular; the single absence is `cma_alloc` (CONFIG_CMA unset in the stock trixie amd64 config), which makes the design's CMA question moot for Fubuki. The dye test's conditions (SLUB=y, SLUB_TINY unset) match Fubuki's configuration class, so its expansion counts transfer.
 
 ### NOT YET BUILT: the live interposition
 
