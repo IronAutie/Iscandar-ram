@@ -88,8 +88,11 @@ From Andrew's own trace ledger report (main chat, 2026-11-04):
 
 ## What remains for Andrew
 
-- Rule on whether the trace statistics, like the census statistics,
-  go inside a math node in this section.
+- Statistics form: settled 2026-11-10 by the census precedent.
+  Andrew removed the census math node in Overleaf (its indents
+  differed from the rest of the paper) and the repo copy was
+  synced to match. The trace statistics take a plain itemize,
+  no math node.
 - Dictate or stet the section's prose, in the pattern of the Sift
   and Census sections, before anything moves into the manuscript.
 - The compiled-subset enumeration and the automatic-boot rehearsal
