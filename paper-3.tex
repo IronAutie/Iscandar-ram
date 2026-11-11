@@ -162,6 +162,21 @@ promoted here to evidence.
 \item And it closes with the hand-off: this ledger is the control the reconciliation will now audit against the census.
 \end{itemize}
 
+\section{The Reconciliation}
+% Status: NOT YET RUN as a formal step. Laid down 2026-11-10 at
+% Andrew's direction, in the itemized style of the Sift section,
+% after being shown to him in draft. Both input ledgers are
+% MEASURED; the comparison artifact itself is still to be
+% produced.
+
+\begin{itemize}
+\item It opens with the question the step answers: of everything the source can do, what did the recorded boot actually do, and through which centers did it do it?
+\item Then the method, a comparison of the two ledgers: every family of events in the control trace is matched back to its sifted sites in the census, and the calls from those sites are followed down to the funnels they pass through.
+\item Then the findings, which the paper can print as the comparison itself, with the fact that gives it its meaning: static mass and dynamic mass stand inverted. \texttt{kmem\_cache\_alloc}, spelled 329 times in the source, produced 706,419 events in the boot; \texttt{kfree}, spelled 40,597 times, carried 166,390 of the boot's frees against 671,928 through \texttt{kmem\_cache\_free}.
+\item Then the boundary, stated in the section rather than apologized for later: the trace is one boot and the kmem family only, so the vmalloc and page families enter this comparison from the source side alone, marked unexercised.
+\item And it closes with the hand-off: the centers this comparison certifies are the patch points, and the compiled subset will now say which of them Fubuki's own kernel actually builds.
+\end{itemize}
+
 \section{Patch Points}
 % Status: DRAFT list in paper-3-patch-points-DRAFT.md.
 

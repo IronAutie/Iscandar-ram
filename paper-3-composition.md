@@ -173,6 +173,8 @@ Drift found and repaired (2026-11-10): Andrew had removed the Census section's m
 
 Access decision (Andrew, 2026-11-10): this VM does not join his Tailscale network yet. He is not ready for it; the join happens during the actual test (the automatic boot rehearsal). Until then, telesart-side material moves by the kit route or by figures Andrew reads off that machine, such as the telezart-kconfig checksum.
 
+Section 6 added (2026-11-10): The Reconciliation now stands in the manuscript between The Control Trace and Patch Points, in the itemized style, after Andrew was shown the draft and directed the addition. Its status note in the manuscript states plainly that the reconciliation has not yet been run as a formal step: both input ledgers are measured, the comparison artifact is still to be produced. Not yet pushed to Overleaf.
+
 ### 3a. Three instruments (superseded grouping)
 
 Present the completeness method:
