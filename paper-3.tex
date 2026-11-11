@@ -178,6 +178,20 @@ promoted here to evidence.
 \item And it closes with the hand-off: the centers this comparison certifies are the patch points, and the compiled subset will now say which of them Fubuki's own kernel actually builds.
 \end{itemize}
 
+\section{The Compiled Subset}
+% Status: MEASURED 2026-11-10. The enumeration artifact stands
+% in data/ (compiled-subset-2026-11-10.md). Laid down 2026-11-10
+% at Andrew's direction, in the itemized style of the Sift
+% section, after being shown to him in draft.
+
+\begin{itemize}
+\item It opens with the question the step answers: of the centers the reconciliation certifies in the source, which ones does Fubuki's own kernel actually build?
+\item Then the method, a reading of two artifacts against each other: every patch point is mapped to the object file that compiles it and the configuration symbol that gates that object, from the kernel's own Makefiles, and the symbols are then read from Fubuki's configuration, each point marked compiled in, modular, or absent.
+\item Then the findings, which the paper can print as the enumeration itself, with the fact that gives it its meaning: every first-ring center is compiled in, and nothing in the set is modular, so the subset Fubuki builds is the patch list entire, less one point. \texttt{cma\_alloc} is absent, its symbol unset in her configuration, and her DMA path runs through the direct allocator instead.
+\item Then the boundary, stated in the section rather than apologized for later: the gating evidence is read from the 6.12.116 tree while the configuration is 6.12.113, and the configuration is the stock package's, not yet checked byte for byte against the build's own exported copy. The enumeration also works at the granularity of object files, so the one inlined center's presence in the artifact is the next step's question, not this one's.
+\item And it closes with the hand-off: this pruned list is what the dye will now audit in the compiled artifact, and it is the exact set of centers the patch will touch.
+\end{itemize}
+
 \section{Patch Points}
 % Status: DRAFT list in paper-3-patch-points-DRAFT.md.
 
