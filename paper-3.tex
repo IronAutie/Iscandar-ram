@@ -245,7 +245,23 @@ promoted here to evidence.
 \end{itemize}
 
 \section{Live Interposition}
-% Status: NOT YET BUILT.
+% Status: NOT YET BUILT. This section is design only, written
+% 2026-11-10 at Andrew's direction after discussion; the build
+% itself is deferred by his decision of the same day, gated on
+% his design rulings and the reconciliation run. Standing
+% discipline from the composition ledger: no sentence in the
+% paper describes any part of this step as working until the
+% corresponding run has been measured.
+
+\begin{itemize}
+\item It opens with the question the step answers: can Iscandar serve a running kernel's requests as they occur, in real time, in place of the allocators the kernel was built with? The earlier papers replayed a recorded trace offline; this step is the live form of the same claim, the allocator interposed between the kernel's callers and the kernel's memory.
+\item Then the arrangement, three parts: the patch at the selected centers of section 8; the bridge from the patched system to the Iscandar arena; and the translation layer, which the design places in user space, between the two.
+\item Then the translation discipline, the step's spine: Iscandar grants coordinates, not addresses, and the kernel cannot dereference a coordinate, so every grant crosses the bridge twice in its life, forward at allocation, when the coordinate becomes an actual pointer the caller can use, and backward at the free door, when the pointer is translated back and the bijection runs in reverse to return the run.
+\item Then the two problems the design records inside this step: the named caches, which carry object size, alignment, and sometimes a constructor, so the design must state how a cache is represented on the Iscandar side before the funnel can serve it; and early boot, since the kernel allocates from its first breath and interposition cannot serve before the arena stands, so either the arena is raised before the first redirected call, or the earliest calls pass through stock and are logged as such. Both stand open at this writing, awaiting the author's rulings.
+\item Then the failure semantics: Iscandar refuses the request and the caller decides; it does not get lost, throw, or terminate abnormally. A kernel allocation site already knows how to hear a refusal, a null return being an ordinary event under memory pressure, so the patch maps the refusal onto the kernel's own failure semantics, and no other outcome crosses the bridge.
+\item Then the boundary, stated in the section rather than apologized for later: none of this is built yet. The section is a design, and the paper claims for it only that the centers are named, the discipline is stated, and the open problems are recorded as open.
+\item And it closes with the hand-off: when this step is built and the boot of section 10 runs on the patched kernel, the measurements that follow are the paper's evidence, and the audit reads them against the prediction and the control.
+\end{itemize}
 
 \section{Measurements}
 % Status: quantities to be fixed before the live run.
