@@ -6,6 +6,7 @@ can be recreated from the repository. Status is stated per artifact.
 - `census-2026-11-07.md` — the sift census (measured). Points from: The Census.
 - `control-trace-2026-11-03.md` — the control trace ledger (measured): event counts, completeness counters, size distribution, and the trace's location and hashes. The raw trace itself is not duplicated here; see the pointer in that file. Points from: The Control Trace.
 - `compiled-subset-2026-11-10.md` — the compiled-subset enumeration (measured): every patch point marked compiled in, modular, or absent against Fubuki's 6.12.113 configuration, with gating evidence from the 6.12.116 Makefiles. Points from: The Compiled Subset.
+- `reconciliation-2026-11-10.md` — the reconciliation (run 2026-11-10): the sift, the control trace, the compiled subset, and the dye read against each other family by family under Andrew's rulings of 2026-11-10, naming the center each family will be served at and the families it will not, each by name. A comparison of the existing artifacts; no new measurement. Points from: The Reconciliation.
 - `dye-test-2026-11-08.md` — the dye protocol and results (measured). Points from: The Dye.
 - `../paper-3-patch-points-DRAFT.md` — the patch-point list (draft). Points from: Patch Points.
 
