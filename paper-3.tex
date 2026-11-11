@@ -193,7 +193,21 @@ promoted here to evidence.
 \end{itemize}
 
 \section{Patch Points}
-% Status: DRAFT list in paper-3-patch-points-DRAFT.md.
+% Status: the full list stands in paper-3-patch-points-DRAFT.md,
+% every function verified by grep against Linux 6.12.116 with
+% file and line, and pruned by the compiled subset (section 7).
+% Laid down 2026-11-10 at Andrew's direction, in the itemized
+% style of the Sift section, after being shown to him in draft.
+% Method provenance, at his correction the same day: the method
+% was arrived at as a thought experiment.
+
+\begin{itemize}
+\item It opens with the question the step answers: at which exact centers, named function by function, will the running kernel be redirected, so that every allocation spelling is served without patching a single call site?
+\item Then the method, arrived at as a thought experiment: the recorded trace is all we need as the control; compare it against the source and patch there, at the allocator centers the spellings funnel into.
+\item Then the findings, which the paper can print as the list itself, in its families: the slab core, six points around the one funnel, \texttt{slab\_alloc\_node}, with the oversize door named separately because it never touches the funnel; the vmalloc center, where the address reservation stays stock and only the page-by-page backing is replaced; the page allocator, held in the second ring; the side centers that follow their backing; and the doors that need no patch of their own because both their centers are patched. The list also carries the naming fact of this kernel: nearly every allocation door is a \texttt{\_noprof} symbol behind \texttt{alloc\_hooks()}, while the free doors keep their plain names.
+\item Then the boundary, stated in the section rather than apologized for later: the list is verified against 6.12.116 while Fubuki's kernel is 6.12.113; the vmalloc and page families rest on the sift alone until a second trace arms them; memblock and the address-space-only mappings are named as out of scope, so the completeness claim can state its own edge; and three design rulings remain open and are recorded as open: the page allocator as substrate or bypassed, the oversize kmalloc door patched separately or left page-backed, and how cache geometries are represented at the funnel.
+\item And it closes with the hand-off: one point on this list is an inlined helper that leaves no symbol in the compiled kernel, and the dye test, which follows, is the audit that finds its copies in the artifact.
+\end{itemize}
 
 \section{The Dye Test}
 % Status: MEASURED on Linux 6.12.116, mm/slub.o.
