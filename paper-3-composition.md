@@ -161,6 +161,8 @@ Summarize the k=3 theory, the k=4 extension, and the Fubuki replay only as far a
 
 Andrew's ruling (2026-11-08): each step gets its own section following the Introduction's overall description; the earlier Three instruments grouping is dissolved. First placed: **The Sift, and its Products**, whose first paragraph Andrew dictated on 2026-11-08 from the blackboard text. Remaining step sections, in order: the control trace, the reconciliation, the compiled subset, the dye, the patch at the centers, the translation layer, the rebuilt ISO, the automatic boot, the audit.
 
+Andrew's ruling (2026-11-10): the Sift section stands as its five-item outline. The itemize is the section's settled form, not a placeholder for prose.
+
 ### 3a. Three instruments (superseded grouping)
 
 Present the completeness method:
