@@ -4,6 +4,7 @@ Each section of the paper points to the artifacts here, so the steps
 can be recreated from the repository. Status is stated per artifact.
 
 - `census-2026-11-07.md` — the sift census (measured). Points from: The Census.
+- `control-trace-2026-11-03.md` — the control trace ledger (measured): event counts, completeness counters, size distribution, and the trace's location and hashes. The raw trace itself is not duplicated here; see the pointer in that file. Points from: The Control Trace.
 - `dye-test-2026-11-08.md` — the dye protocol and results (measured). Points from: The Dye.
 - `../paper-3-patch-points-DRAFT.md` — the patch-point list (draft). Points from: Patch Points.
 
