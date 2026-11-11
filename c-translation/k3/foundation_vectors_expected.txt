@@ -1,0 +1,101 @@
+geometry arity=32 dimensions=3 sectors_per_byte=8
+mpu max_word=4294967295 max_start=32767 max_count=32768
+coord disp sector=0 row=0 plane=0 -> 0
+coord disp sector=1 row=0 plane=0 -> 1
+coord disp sector=31 row=0 plane=0 -> 31
+coord disp sector=0 row=1 plane=0 -> 32
+coord disp sector=0 row=0 plane=1 -> 1024
+coord disp sector=5 row=7 plane=3 -> 3301
+coord disp sector=31 row=31 plane=31 -> 32767
+coord eq (1,2,3)==(1,2,3) -> 1
+coord eq (1,2,3)==(1,2,4) -> 0
+coord eq (0,0,0)==(0,0,1) -> 0
+coord eq (31,31,31)==(31,31,31) -> 1
+bijection to_coordinate 0 -> sector=0 row=0 plane=0
+bijection to_coordinate 1 -> sector=1 row=0 plane=0
+bijection to_coordinate 8 -> sector=8 row=0 plane=0
+bijection to_coordinate 9 -> sector=9 row=0 plane=0
+bijection to_coordinate 32 -> sector=0 row=1 plane=0
+bijection to_coordinate 33 -> sector=1 row=1 plane=0
+bijection to_coordinate 64 -> sector=0 row=2 plane=0
+bijection to_coordinate 65 -> sector=1 row=2 plane=0
+bijection to_coordinate 1024 -> sector=0 row=0 plane=1
+bijection to_coordinate 1025 -> sector=1 row=0 plane=1
+bijection to_coordinate 32767 -> sector=31 row=31 plane=31
+bijection to_coordinate 32768 -> sector=0 row=0 plane=32
+bijection roundtrip 0 -> 0
+bijection roundtrip 1 -> 1
+bijection roundtrip 8 -> 8
+bijection roundtrip 9 -> 9
+bijection roundtrip 32 -> 32
+bijection roundtrip 33 -> 33
+bijection roundtrip 64 -> 64
+bijection roundtrip 65 -> 65
+bijection roundtrip 1024 -> 1024
+bijection roundtrip 1025 -> 1025
+bijection roundtrip 32767 -> 32767
+bijection roundtrip 32768 -> 32768
+bijection to_displacement sector=0 row=0 plane=0 -> 0
+bijection to_displacement sector=31 row=31 plane=31 -> 32767
+bijection to_displacement sector=1 row=0 plane=1 -> 1025
+bijection to_displacement sector=0 row=31 plane=0 -> 992
+mpu load start=0 count=1 reserved=0 order=motorola -> word=0x80000000 v=1 r=0 start=0 count=1
+mpu load start=0 count=8 reserved=0 order=motorola -> word=0x80000007 v=1 r=0 start=0 count=8
+mpu load start=0 count=9 reserved=0 order=motorola -> word=0x80000008 v=1 r=0 start=0 count=9
+mpu load start=0 count=32 reserved=0 order=motorola -> word=0x8000001F v=1 r=0 start=0 count=32
+mpu load start=0 count=33 reserved=0 order=motorola -> word=0x80000020 v=1 r=0 start=0 count=33
+mpu load start=0 count=64 reserved=0 order=motorola -> word=0x8000003F v=1 r=0 start=0 count=64
+mpu load start=0 count=65 reserved=0 order=motorola -> word=0x80000040 v=1 r=0 start=0 count=65
+mpu load start=0 count=1024 reserved=0 order=motorola -> word=0x800003FF v=1 r=0 start=0 count=1024
+mpu load start=0 count=1025 reserved=0 order=motorola -> word=0x80000400 v=1 r=0 start=0 count=1025
+mpu load start=0 count=32767 reserved=0 order=motorola -> word=0x80007FFE v=1 r=0 start=0 count=32767
+mpu load start=0 count=32768 reserved=0 order=motorola -> word=0x80007FFF v=1 r=0 start=0 count=32768
+mpu load start=0 count=1 reserved=0 order=motorola -> word=0x80000000 v=1 r=0 start=0 count=1
+mpu load start=1 count=1 reserved=0 order=motorola -> word=0x80008000 v=1 r=0 start=1 count=1
+mpu load start=8 count=1 reserved=0 order=motorola -> word=0x80040000 v=1 r=0 start=8 count=1
+mpu load start=9 count=1 reserved=0 order=motorola -> word=0x80048000 v=1 r=0 start=9 count=1
+mpu load start=32 count=1 reserved=0 order=motorola -> word=0x80100000 v=1 r=0 start=32 count=1
+mpu load start=33 count=1 reserved=0 order=motorola -> word=0x80108000 v=1 r=0 start=33 count=1
+mpu load start=64 count=1 reserved=0 order=motorola -> word=0x80200000 v=1 r=0 start=64 count=1
+mpu load start=65 count=1 reserved=0 order=motorola -> word=0x80208000 v=1 r=0 start=65 count=1
+mpu load start=1024 count=1 reserved=0 order=motorola -> word=0x82000000 v=1 r=0 start=1024 count=1
+mpu load start=1025 count=1 reserved=0 order=motorola -> word=0x82008000 v=1 r=0 start=1025 count=1
+mpu load start=32767 count=1 reserved=0 order=motorola -> word=0xBFFF8000 v=1 r=0 start=32767 count=1
+mpu load start=0 count=1 reserved=0 order=intel -> word=0x00000001 v=1 r=0 start=0 count=1
+mpu load start=0 count=32768 reserved=0 order=intel -> word=0xFFFE0001 v=1 r=0 start=0 count=32768
+mpu load start=32767 count=1 reserved=0 order=intel -> word=0x0001FFFD v=1 r=0 start=32767 count=1
+mpu load start=32767 count=32768 reserved=0 order=intel -> word=0xFFFFFFFD v=1 r=0 start=32767 count=32768
+mpu load start=1025 count=9 reserved=0 order=intel -> word=0x00101005 v=1 r=0 start=1025 count=9
+mpu load start=0 count=1 reserved=1 order=motorola -> word=0xC0000000 v=1 r=1 start=0 count=1
+mpu load start=100 count=200 reserved=1 order=intel -> word=0x018E0193 v=1 r=1 start=100 count=200
+mpu load_coordinate disp=0 count=1 -> word=0x80000000 v=1 r=0 start=0 count=1
+mpu load_coordinate disp=1 count=8 -> word=0x80008007 v=1 r=0 start=1 count=8
+mpu load_coordinate disp=1024 count=1024 -> word=0x820003FF v=1 r=0 start=1024 count=1024
+mpu load_coordinate disp=32767 count=32768 -> word=0xBFFFFFFF v=1 r=0 start=32767 count=32768
+mpu load_coordinate disp=1025 count=9 -> word=0x82008008 v=1 r=0 start=1025 count=9
+mpu adopt word=0x00000000 -> v=0 r=0 start=0 count=1
+mpu adopt word=0x00000001 -> v=0 r=0 start=0 count=2
+mpu adopt word=0x80000000 -> v=1 r=0 start=0 count=1
+mpu adopt word=0x40000000 -> v=0 r=1 start=0 count=1
+mpu adopt word=0x0000FFFF -> v=0 r=0 start=1 count=32768
+mpu adopt word=0xFFFFFFFF -> v=1 r=1 start=32767 count=32768
+mpu adopt word=0xDEADBEEF -> v=1 r=1 start=15707 count=16112
+mpu coordinate start=1025 count=9 order=motorola -> sector=1 row=0 plane=1
+mpu coordinate start=32767 count=1 order=intel -> sector=31 row=31 plane=31
+mpu refuse load start=32768 count=1 -> status=22
+mpu refuse load start=-1 count=1 -> status=22
+mpu refuse load start=0 count=0 -> status=23
+mpu refuse load start=0 count=32769 -> status=23
+mpu refuse load start=0 count=1 reserved=2 -> status=21
+mpu refuse load start=0 count=1 order=bogus -> status=24
+mpu refuse adopt word=4294967296 -> status=20
+mpu refuse adopt word=-1 -> status=20
+mpu refuse unload order=bogus -> status=25
+mpu refuse load_coordinate disp=32768 count=1 -> status=22
+nothing range -> lo=0 hi=0 len=1
+nothing call request=0 -> 0
+nothing call request=7 -> 0
+nothing call request=32768 -> 0
+nothing search -> None
+error range -> lo=0 hi=32767 len=32768
+error search -> status=1 plane=0 row=0 sector=0

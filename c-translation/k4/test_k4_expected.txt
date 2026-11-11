@@ -1,0 +1,68 @@
+BC 0 c=0 s=0 r=0 p=0 disp=0
+BC 1 c=2 s=3 r=4 p=5 disp=5251
+BC 2 c=31 s=31 r=31 p=31 disp=32767
+BC 3 c=5 s=40 r=0 p=0 disp=40
+BC 4 c=7 s=0 r=33 p=0 disp=1056
+BC 5 c=0 s=0 r=0 p=0 disp=0
+BCEQ 0 5 = 1
+BCEQ 0 1 = 0
+BCEQ 1 1 = 1
+BCEQ 3 4 = 0
+CPU 0 word=0x800000008A418063 v=1 r=0 start=70787 count=100 coord=(2,3,4,5) ov=1 or=0 ostart=70787 ocount=100
+CPU 1 word=0xC00000008A418063 v=1 r=1 start=70787 count=100 coord=(2,3,4,5) ov=1 or=1 ostart=70787 ocount=100
+CPU 2 word=0x00C60008A4180001 v=0 r=0 start=1132592 count=2 coord=(34,16,1,18) ov=1 or=0 ostart=70787 ocount=100
+CPU 3 word=0x00C60008A4180003 v=0 r=0 start=1132592 count=4 coord=(34,16,1,18) ov=1 or=1 ostart=70787 ocount=100
+CPU 4 word=0x80000007FFFFFFFF v=1 r=0 start=1048575 count=32768 coord=(31,31,31,31) ov=1 or=0 ostart=1048575 ocount=32768
+CPU 5 word=0x8000000000000000 v=1 r=0 start=0 count=1 coord=(0,0,0,0) ov=1 or=0 ostart=0 ocount=1
+CPU 6 word=0x8000000140140004 v=1 r=0 start=163880 count=5 coord=(5,8,1,0) ov=1 or=0 ostart=163880 ocount=5
+CPU 7 word=0x80000001C2100009 v=1 r=0 start=230432 count=10 coord=(7,0,1,1) ov=1 or=0 ostart=230432 ocount=10
+CPU 8 word=0xFFFE0008A4180001 v=1 r=1 start=1132592 count=2 coord=(34,16,1,18) ov=1 or=0 ostart=70787 ocount=32768
+CPUX 0 -> FAIL
+CPUX 1 -> FAIL
+CPUX 2 -> FAIL
+CPUX 3 -> FAIL
+CPUX 4 -> FAIL
+CPUX 5 -> FAIL
+ADOPT 0 word=0x0000000000000000 v=0 r=0 start=0 count=1 coord=(0,0,0,0) iv=0 ir=0 istart=0 icount=1
+ADOPT 1 word=0xFFFFFFFFFFFFFFFF v=1 r=1 start=1073741823 count=32768 coord=(32767,31,31,31) iv=1 ir=1 istart=1073741823 icount=32768
+ADOPT 2 word=0x8000000000000063 v=1 r=0 start=0 count=100 coord=(0,0,0,0) iv=1 ir=1 istart=0 icount=16385
+ADOPT 3 word=0x0000000000000001 v=0 r=0 start=0 count=2 coord=(0,0,0,0) iv=1 ir=0 istart=0 icount=1
+ADOPT 4 word=0xDEADBEEF12345678 v=1 r=1 start=1037968488 count=22137 coord=(31676,8,3,9) iv=0 ir=0 istart=937288262 icount=28503
+BEAMINIT 0 arg=2 card=2 supported=65536
+BM0 A req=100 -> 0x8000000000000063 overall=100 lead=0
+BM0 A req=100 -> 0x80000000003E0063 overall=200 lead=0
+BM0 A req=200 -> 0x80000000007000C7 overall=400 lead=0
+BM0 F #1 -> status=8 overall=300 lead=0
+BM0 A req=50 -> 0x8000000000320031 overall=350 lead=0
+BM0 A req=32768 -> 0x8000000040007FFF overall=33118 lead=1
+BM0 A req=1 -> 0x80000000004F8000 overall=33119 lead=0
+BM0 F #4 -> status=8 overall=351 lead=0
+BM0 F #4 -> status=4 overall=351 lead=0
+BM0 A req=40000 -> NONE overall=351 lead=0
+BM0 A req=0 -> NONE overall=351 lead=0
+BM0 A req=-5 -> NONE overall=351 lead=0
+BM0 A req=32417 -> 0x8000000040007EA0 overall=32768 lead=1
+BM0 F #0 -> status=8 overall=32668 lead=1
+BM0 F #2 -> status=8 overall=32468 lead=1
+BM0 F #3 -> status=8 overall=32418 lead=1
+BM0 F #5 -> status=8 overall=32417 lead=1
+BM0 F #6 -> status=8 overall=0 lead=1
+BM0 A req=32768 -> 0x8000000040007FFF overall=32768 lead=1
+BM0 A req=32768 -> 0x8000000000007FFF overall=65536 lead=0
+BM0 A req=1 -> NONE overall=65536 lead=0
+BEAMINIT 1 arg=1 card=1 supported=32768
+BM1 A req=500 -> 0x80000000000001F3 overall=500 lead=0
+BM1 A req=32768 -> NONE overall=500 lead=0
+BM1 F #0 -> status=8 overall=0 lead=0
+BM1 A req=32768 -> 0x8000000000007FFF overall=32768 lead=0
+BM1 A req=1 -> NONE overall=32768 lead=0
+BEAMINIT 2 arg=0 card=1 supported=32768
+BM2 A req=10 -> 0x8000000000000009 overall=10 lead=0
+BEAMINIT 3 arg=-3 card=1 supported=32768
+BM3 A req=10 -> 0x8000000000000009 overall=10 lead=0
+BEAMINIT 4 arg=4 card=4 supported=131072
+BM4 A req=32768 -> 0x8000000000007FFF overall=32768 lead=0
+BM4 A req=32768 -> 0x8000000040007FFF overall=65536 lead=1
+BM4 A req=32768 -> 0x8000000080007FFF overall=98304 lead=2
+BM4 A req=32768 -> 0x80000000C0007FFF overall=131072 lead=3
+BM4 A req=32768 -> NONE overall=131072 lead=3
