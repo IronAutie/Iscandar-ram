@@ -171,6 +171,8 @@ Executed (2026-11-10): at Andrew's direction the Control Trace section was laid 
 
 Drift found and repaired (2026-11-10): Andrew had removed the Census section's math node in Overleaf (its indents differed from the rest of the paper), leaving the statistics in a plain itemize; the repo copy still carried the display block. Checked in Overleaf at Andrew's direction, then the repo copy was synced to the Overleaf form at his go. Consequence for the control trace draft: its open question about a math node for the trace statistics is settled by this precedent. Trace statistics take a plain itemize, no math node.
 
+Access decision (Andrew, 2026-11-10): this VM does not join his Tailscale network yet. He is not ready for it; the join happens during the actual test (the automatic boot rehearsal). Until then, telesart-side material moves by the kit route or by figures Andrew reads off that machine, such as the telezart-kconfig checksum.
+
 ### 3a. Three instruments (superseded grouping)
 
 Present the completeness method:
