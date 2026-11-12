@@ -206,6 +206,10 @@ left untouched.
 Local, in order: `9a83525` (compile-time map), `40e5050`
 (translation layer), `e8240dd` (staged patch set),
 `5d2b51c` (boot services), `5c57517` (ELBE linkage),
-`c8fa534` (link-check). Nothing was pushed to GitHub; the
-push waits for Andrew's token. Overleaf and paper-3.tex
-were not touched.
+`c8fa534` (link-check), `d4337c4` (this report), `0afa340`
+(center count correction: the prefix counters are indexed
+by center id, ids to 43, so the count is 48; the layer, the
+constants, and the bridge core already carried 48, and this
+brings the header of record into line). Nothing was pushed
+to GitHub; the push waits for Andrew's token. Overleaf and
+paper-3.tex were not touched.
