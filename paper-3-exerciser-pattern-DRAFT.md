@@ -1,6 +1,8 @@
 # DRAFT: Page exerciser, candidate standard-run pattern (Decision 6)
 
-Status: candidate only, prepared 2026-11-09 for Andrew's approval or edit.
+Status: SUPERSEDED 2026-11-11 by paper-3-exerciser-pattern.md, which
+finishes the pattern (scale factor 16, anchors generalized to the
+two largest classes) and is implemented by exerciser/exerciser.c.
 Nothing here is in the manuscript, and no exerciser code has been written
 from it. It answers Decision 6 in `paper-3-composition.md` (the exact
 allocation pattern and size classes) with one concrete, fully counted

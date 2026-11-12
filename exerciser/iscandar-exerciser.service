@@ -1,0 +1,19 @@
+[Unit]
+Description=Iscandar page exerciser (Paper 3 evidence run)
+Documentation=file:/usr/local/share/doc/iscandar-exerciser/README.md
+After=multi-user.target
+# The evidence rig's finish service (trace export and shutdown)
+# orders itself After=iscandar-exerciser.service.
+
+[Service]
+Type=oneshot
+ExecStartPre=/bin/mkdir -p /var/log/iscandar-exerciser
+ExecStart=/usr/local/sbin/iscandar-exerciser
+StandardInput=tty
+TTYPath=/dev/console
+StandardOutput=journal+console
+StandardError=journal+console
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target
