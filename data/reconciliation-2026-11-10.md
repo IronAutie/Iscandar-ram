@@ -461,7 +461,13 @@ rather than leaving it open.
    remains as bookkeeping over Iscandar grants or is
    bypassed outright is settled by no input. It changes no
    family's center, and it is build-time design work still
-   owed.
+   owed. CLOSED by Andrew's ruling of 2026-11-11: bypass
+   outright. His ground: the pages serving translated
+   requests are Iscandar allocations, so there is no second
+   serving for SLUB to bookkeep. The evidence run's check:
+   slab page allocations attributable to redirected caches
+   are zero after the early-boot prefix; any that appear are
+   a leak in the patch, a finding.
 7. gen_pool's served set: in scope by ruling, unnamed by
    any input (see Family 4c).
 8. The kv fallback verification, carried from the patch
