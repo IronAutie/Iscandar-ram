@@ -1,0 +1,55 @@
+STAGED PATCH 0002 of 5: apply after 0005.
+Target: Linux 6.12.116, mm/slab_common.c. Line anchors are
+the patch-point list's numbers of record; context lines are
+schematic. Re-base on the real tree before applying.
+
+Subject: iscandar: cache setup at 1.5; krealloc by composition
+
+Creation registers the cache with the layer before the
+cache is returned to its creator: an unregistered cache
+must never reach 1.1, where an unknown cache after the
+raise is a finding. Registration during the prefix is
+deferred: the core registers prefix-born caches at the
+raise (0005). A registration the layer refuses (the cap)
+fails the creation, loudly: the cap is the verdict, and a
+kernel that cannot create a cache it was configured to
+create has met a build figure that was drawn too small,
+which is a finding about the build, not a cue to serve
+stock.
+
+Destruction deregisters first; if the layer answers that
+objects are still live, the core logs the verdict (0005)
+and the stock teardown proceeds, since a cache being
+destroyed cannot be undestroyed. The disagreement is on
+the record in the log, not papered over.
+
+Center 1.6, krealloc_noprof, takes no hunk in this patch
+or any other: it composes an allocation, a copy, and a
+free, and 1.1 and 1.4 are patched, so it follows by
+composition (reconciliation, Family 1d). Its coverage is
+verified by the manifest, not assumed silently.
+
+--- a/mm/slab_common.c
++++ b/mm/slab_common.c
+@@ -297,7 +297,20 @@
+-struct kmem_cache *__kmem_cache_create_args(...)
++struct kmem_cache *__kmem_cache_create_args(...)
+ {
+ 	...
++	/* At the successful return, with s the new cache: */
++	if (iscandar_active()
++	    && iscandar_cache_register(s, args->object_size,
++				       args->align, args->flags))
++		return ERR_PTR(-ENOSPC);
++	iscandar_prefix_note(ISCANDAR_CENTER_CACHE_SETUP,
++			     args->object_size);
+ 	...
+ }
+@@ -506,5 +519,10 @@
+-void kmem_cache_destroy(struct kmem_cache *s)
++void kmem_cache_destroy(struct kmem_cache *s)
+ {
++	if (iscandar_active())
++		iscandar_cache_unregister(s);
+ 	...
+ }

@@ -1,0 +1,80 @@
+STAGED PATCH 0003 of 5: apply after 0005.
+Target: Linux 6.12.116, mm/vmalloc.c. Line anchors are the
+patch-point list's numbers of record; context lines are
+schematic. Re-base on the real tree before applying.
+
+Subject: iscandar: vmalloc backing at 2.3, free door at 2.4
+
+The family splits at its own seam (reconciliation, Family
+2): the reservation half (2.2, __get_vm_area_node and
+alloc_vmap_area) stays stock, address-space bookkeeping
+that was never part of the replacement, and is not patched.
+Only the backing is replaced: where the stock body fills
+the area's page array page by page from the page allocator,
+the bridge serves ONE exact-fit run for the whole area, at
+the standing calibration of one sector to one page, and
+the array is filled with the run's frames in order.
+
+One vmalloc contains a hidden slab allocation (the
+page-pointer array, allocated by a recursive vmalloc call
+into Family 1, per the patch list): it arrives at 1.1 as
+any cache allocation does, and the layer's books expect
+vmalloc traffic to touch Family 1 in this way.
+
+The frame binding: area->pages[] takes struct page
+pointers, which the glue forms from the arena's reserved
+physical range (iscandar_offset_to_page, 0005). That range
+is why the arena in the live system is a reserved physical
+span and not an anonymous mapping: the bench binding step
+is carried in BUILD-STATUS.md.
+
+--- a/mm/vmalloc.c
++++ b/mm/vmalloc.c
+@@ -3594,7 +3594,30 @@
+-static int vm_area_alloc_pages(...)
++static int vm_area_alloc_pages(...)
+ {
++	if (iscandar_active()) {
++		struct IscandarBridgeRecord rec = { };
++		unsigned int i;
++
++		rec.op = ISCANDAR_OP_VMALLOC_BACKING;
++		rec.size = (u64)area->nr_pages << PAGE_SHIFT;
++		if (iscandar_bridge_call(&rec)
++		    || rec.status != ISCANDAR_BRIDGE_OK)
++			return -ENOMEM;
++		for (i = 0; i < area->nr_pages; i++)
++			area->pages[i] =
++				iscandar_offset_to_page(rec.result) + i;
++		return 0;
++	}
++	iscandar_prefix_note(ISCANDAR_CENTER_VMALLOC_BACKING,
++			     (size_t)area->nr_pages << PAGE_SHIFT);
+ 	...
+ }
+@@ -3407,6 +3430,18 @@
+-void vfree(const void *addr)
++void vfree(const void *addr)
+ {
++	if (iscandar_ptr_in_arena(addr)) {
++		struct IscandarBridgeRecord rec = { };
++
++		rec.op = ISCANDAR_OP_VFREE;
++		rec.size = iscandar_ptr_to_offset(addr);
++		(void)iscandar_bridge_call(&rec);
++		return;
++	}
+ 	...
+ }
+@@ -3373,4 +3408,8 @@
+-void vfree_atomic(const void *addr)
++void vfree_atomic(const void *addr)
+ {
++	/* Same door as vfree: the bridge free path does not
++	 * sleep in this build's serving arrangement (the call
++	 * completes synchronously), so the atomic door takes
++	 * the same range decision and the same record. If the
++	 * bench build makes the call blocking, this door is
++	 * where that finding lands; it is not pre-decided. */
+ 	...
+ }

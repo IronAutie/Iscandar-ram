@@ -1,0 +1,152 @@
+STAGED PATCH 0001 of 5: apply after 0005 (the bridge core).
+Target: Linux 6.12.116, mm/slub.c. Line anchors are the
+patch-point list's numbers of record; context lines are
+schematic, parameter lists elided where the list does not
+record them. Re-base on the real tree before applying.
+
+Subject: iscandar: redirect the slab centers (1.1, 1.3, 1.4)
+
+At 1.1 the size served is s->object_size. At this build's
+page granularity that is the caller's request in every case
+that reaches the door: for a named cache the object size IS
+the request, and for the kmalloc caches the bucket a request
+rounds to crosses a page boundary only where the request
+itself does (buckets run to 8,192 and page boundaries stand
+at 4,096 and 8,192), so ceil(bucket / page) equals
+ceil(request / page) throughout. The constructor discipline
+of ruling 3 at this granularity: each bridge grant is a
+fresh run, so a cache's ctor runs on every grant, which is
+the ledger's "once per run on its first grant" stated at
+run granularity. The zeroing of __GFP_ZERO is kept at the
+door, as the stock path keeps it.
+
+The free doors decide by range first: an address inside the
+arena goes to the bridge; an address outside it was born
+outside it (a prefix object, a substrate object) and frees
+through the stock body. That is the design's named seam,
+not a fallback: nothing allocated through the bridge can
+carry an out-of-arena address.
+
+The watch point: SLUB is bypassed outright for redirected
+caches (Andrew's ruling, 2026-11-11). alloc_slab_page is
+not patched; it gains a counter, so the evidence run can
+show slab page allocations attributable to redirected
+caches at zero after the prefix. The counter is read from
+/proc/iscandar_bridge.
+
+--- a/mm/slub.c
++++ b/mm/slub.c
+@@ -4205,7 +4205,38 @@
+ static __fastpath_inline
+-void *slab_alloc_node(struct kmem_cache *s, ...)
++void *slab_alloc_node(struct kmem_cache *s, ...)
+ {
++	if (iscandar_active()) {
++		struct IscandarBridgeRecord rec = { };
++		void *object;
++
++		rec.op = ISCANDAR_OP_CACHE_ALLOC;
++		rec.cache_id = iscandar_cache_lookup(s);
++		rec.size = s->object_size;
++		rec.align = s->align;
++		if (rec.cache_id == 0)
++			/* A cache with no registry entry after the
++			 * raise: a finding, not a fallback. */
++			return NULL;
++		if (iscandar_bridge_call(&rec)
++		    || rec.status != ISCANDAR_BRIDGE_OK)
++			return NULL;
++		object = iscandar_offset_to_ptr(rec.result);
++		if (s->ctor)
++			s->ctor(object);
++		if (unlikely(gfpflags & __GFP_ZERO))
++			memset(object, 0, s->object_size);
++		return object;
++	}
++	iscandar_prefix_note(ISCANDAR_CENTER_SLAB_ALLOC,
++			     s->object_size);
+ 	...
+ }
+@@ -4326,6 +4357,22 @@
+-void *__kmalloc_large_noprof(size_t size, gfp_t flags)
++void *__kmalloc_large_noprof(size_t size, gfp_t flags)
+ {
++	if (iscandar_active()) {
++		struct IscandarBridgeRecord rec = { };
++
++		rec.op = ISCANDAR_OP_ALLOC_LARGE;
++		rec.size = size;
++		if (iscandar_bridge_call(&rec)
++		    || rec.status != ISCANDAR_BRIDGE_OK)
++			return NULL;
++		return iscandar_offset_to_ptr(rec.result);
++	}
++	iscandar_prefix_note(ISCANDAR_CENTER_KMALLOC_LARGE, size);
+ 	...
+ }
+@@ -4785,6 +4832,20 @@
+-void kmem_cache_free(struct kmem_cache *s, void *objp)
++void kmem_cache_free(struct kmem_cache *s, void *objp)
+ {
++	if (iscandar_ptr_in_arena(objp)) {
++		struct IscandarBridgeRecord rec = { };
++
++		rec.op = ISCANDAR_OP_FREE;
++		rec.size = iscandar_ptr_to_offset(objp);
++		rec.cache_id = iscandar_cache_lookup(s);
++		(void)iscandar_bridge_call(&rec);
++		return;
++	}
+ 	...
+ }
+@@ -4817,6 +4878,18 @@
+-void kfree(const void *objp)
++void kfree(const void *objp)
+ {
++	if (iscandar_ptr_in_arena(objp)) {
++		struct IscandarBridgeRecord rec = { };
++
++		rec.op = ISCANDAR_OP_FREE;
++		rec.size = iscandar_ptr_to_offset(objp);
++		(void)iscandar_bridge_call(&rec);
++		return;
++	}
+ 	...
+ }
+@@ -4945,6 +5018,24 @@
+-void kmem_cache_free_bulk(struct kmem_cache *s, size_t size, void **p)
++void kmem_cache_free_bulk(struct kmem_cache *s, size_t size, void **p)
+ {
++	/* Each pointer decides by its own range: bridge-born
++	 * pointers go home one by one; the rest are compacted
++	 * to the tail and freed by the stock body below. */
++	size_t i, stock = size;
++
++	for (i = 0; i < size; i++) {
++		if (iscandar_ptr_in_arena(p[i])) {
++			struct IscandarBridgeRecord rec = { };
++
++			rec.op = ISCANDAR_OP_FREE;
++			rec.size = iscandar_ptr_to_offset(p[i]);
++			rec.cache_id = iscandar_cache_lookup(s);
++			(void)iscandar_bridge_call(&rec);
++			p[i] = p[--stock];
++			p[stock] = NULL;
++			i--;
++		}
++	}
++	size = stock;
++	if (size == 0)
++		return;
+ 	...
+ }
+@@ -2470,4 +2541,8 @@
+ static struct page *alloc_slab_page(...)
+ {
++	/* Watch point, instrumented only. Under the bypass
++	 * ruling this counter must not move for a redirected
++	 * cache after the early-boot prefix; the evidence run
++	 * reads it from /proc/iscandar_bridge. */
++	atomic64_inc(&iscandar_slab_page_calls);
+ 	...
+ }

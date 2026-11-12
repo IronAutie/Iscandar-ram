@@ -1,0 +1,299 @@
+STAGED PATCH 0005 of 5: apply FIRST (the centers call this core).
+Target: Linux 6.12.116. Context lines are schematic; re-base
+on the real tree before applying (see README.md in this
+directory). The shared header is NOT in this patch: at
+application time it is copied verbatim from
+build/bridge/iscandar_bridge.h to include/iscandar_bridge.h
+in the tree. No bridge constant is defined here.
+
+Subject: iscandar: the kernel side of the bridge
+
+The core owns: the channel (its physical address handed in
+by the iscandar_channel boot parameter; the region is the
+one reserved in the compile-time map), the synchronous
+request path, the arena's kernel-space mapping (the reserved
+range's physical base handed in by the iscandar_arena boot
+parameter, so a bridge offset becomes a kernel pointer by
+addition: the address form of the map's cube
+correspondence), the cache pointer to registry id table,
+the early-boot prefix machinery, and /proc/iscandar_bridge.
+
+Prefix discipline (ruling 4): until the layer has raised
+(published the channel control block and the ready write
+lands on /proc/iscandar_bridge), iscandar_active() is false
+and every center passes stock, counted per center in the
+control block and logged into the prefix ring. At the raise,
+the core registers the caches born during the prefix, so
+their later allocations arrive at 1.1 with an id in hand.
+
+Refusal discipline: a bridge call that times out or returns
+a non-OK status gives the center a nonzero return here, and
+the center returns its own failure shape. Nothing in this
+core, and nothing at any center, falls back to stock after
+the prefix.
+
+--- /dev/null
++++ b/include/linux/iscandar.h
+@@ -0,0 +1,40 @@
++/* SPDX-License-Identifier: GPL-2.0 */
++/* iscandar.h -- the kernel-internal bridge API. The shared
++ * definitions (constants, records, the control block) live
++ * in <iscandar_bridge.h>, copied verbatim from the build's
++ * one shared header at patch application time. */
++#ifndef _LINUX_ISCANDAR_H
++#define _LINUX_ISCANDAR_H
++
++#include <linux/types.h>
++#include <iscandar_bridge.h>
++
++struct kmem_cache;
++struct gen_pool;
++
++/* False during the early-boot prefix; true from the raise. */
++bool iscandar_active(void);
++
++/* Count and log a stock-served call during the prefix. */
++void iscandar_prefix_note(unsigned int center, size_t size);
++
++/* The synchronous request path. Zero on a completed round
++ * trip (rec.status then carries the layer's verdict),
++ * negative on a channel failure or timeout. */
++int iscandar_bridge_call(struct IscandarBridgeRecord *rec);
++
++/* The registry table, filled at 1.5 and at the raise. */
++u32 iscandar_cache_lookup(struct kmem_cache *s);
++int iscandar_cache_register(struct kmem_cache *s, size_t size,
++			    unsigned int align, unsigned long flags);
++void iscandar_cache_unregister(struct kmem_cache *s);
++
++/* The arena as the kernel sees it: a reserved range mapped
++ * at core init. Offset and pointer convert by addition. */
++void *iscandar_offset_to_ptr(u64 offset);
++struct page *iscandar_offset_to_page(u64 offset);
++bool iscandar_ptr_in_arena(const void *p);
++u64 iscandar_ptr_to_offset(const void *p);
++
++/* gen_pool served set: a pool is arena-served only if the
++ * build registered it (the reconciliation records the set
++ * as open; registration is where the build names it). */
++bool iscandar_gen_pool_is_arena(struct gen_pool *pool);
++
++/* The bypass watch counter (0001 instruments the site). */
++extern atomic64_t iscandar_slab_page_calls;
++
++#endif
+--- /dev/null
++++ b/mm/iscandar_bridge.c
+@@ -0,0 +1,190 @@
++// SPDX-License-Identifier: GPL-2.0
++/* iscandar_bridge.c -- the kernel side of the Paper 3
++ * bridge. Scaffolding at the author's direction; the
++ * allocator it serves is the engine in the user-space
++ * translation layer. See build/patch/README.md in the
++ * Iscandar-ram repository for the staging terms. */
++
++#include <linux/atomic.h>
++#include <linux/delay.h>
++#include <linux/genalloc.h>
++#include <linux/io.h>
++#include <linux/iscandar.h>
++#include <linux/mutex.h>
++#include <linux/proc_fs.h>
++#include <linux/slab.h>
++#include <linux/string.h>
++#include <linux/uaccess.h>
++
++static u64 iscandar_channel_phys;
++static u64 iscandar_arena_phys;
++static void *iscandar_arena_base;	/* kernel mapping */
++static struct IscandarChannelControl *iscandar_ctrl;
++static struct IscandarBridgeRecord *iscandar_req_ring;
++static struct IscandarBridgeRecord *iscandar_resp_ring;
++static DEFINE_MUTEX(iscandar_call_lock);
++static bool iscandar_ready;
++
++atomic64_t iscandar_slab_page_calls = ATOMIC64_INIT(0);
++
++static int __init iscandar_channel_setup(char *str)
++{
++	iscandar_channel_phys = memparse(str, NULL);
++	return 1;
++}
++__setup("iscandar_channel=", iscandar_channel_setup);
++
++static int __init iscandar_arena_setup(char *str)
++{
++	iscandar_arena_phys = memparse(str, NULL);
++	return 1;
++}
++__setup("iscandar_arena=", iscandar_arena_setup);
++
++bool iscandar_active(void)
++{
++	return READ_ONCE(iscandar_ready);
++}
++
++void *iscandar_offset_to_ptr(u64 offset)
++{
++	return (void *)((char *)iscandar_arena_base + offset);
++}
++
++struct page *iscandar_offset_to_page(u64 offset)
++{
++	return phys_to_page(iscandar_arena_phys + offset);
++}
++
++bool iscandar_ptr_in_arena(const void *p)
++{
++	return p >= iscandar_arena_base
++	    && p < (void *)((char *)iscandar_arena_base
++			    + ISCANDAR_ARENA_BYTES);
++}
++
++u64 iscandar_ptr_to_offset(const void *p)
++{
++	return (u64)((const char *)p - (const char *)iscandar_arena_base);
++}
++
++void iscandar_prefix_note(unsigned int center, size_t size)
++{
++	struct IscandarPrefixEntry *log;
++	u32 slot;
++
++	if (iscandar_ready)
++		return;	/* the note is for the prefix only; call
++			 * sites may reach it in any state */
++	if (!iscandar_ctrl || center >= ISCANDAR_CENTER_COUNT)
++		return;
++	iscandar_ctrl->prefix_calls[center]++;
++	slot = iscandar_ctrl->prefix_log_written;
++	if (slot < ISCANDAR_PREFIX_ENTRIES) {
++		log = (struct IscandarPrefixEntry *)
++			((char *)iscandar_ctrl + ISCANDAR_PAGE_BYTES
++			 + (ISCANDAR_CHANNEL_REQ_PAGES
++			    + ISCANDAR_CHANNEL_RESP_PAGES)
++			   * ISCANDAR_PAGE_BYTES);
++		log[slot].center = center;
++		log[slot].size = (u32)size;
++		log[slot].token = 0;
++		iscandar_ctrl->prefix_log_written++;
++	} else {
++		iscandar_ctrl->prefix_overflow = 1;
++	}
++}
++
++int iscandar_bridge_call(struct IscandarBridgeRecord *rec)
++{
++	u32 tail;
++	int waited = 0;
++
++	if (!iscandar_ready || !iscandar_ctrl)
++		return -ENODEV;
++	mutex_lock(&iscandar_call_lock);
++	tail = iscandar_ctrl->req_tail;
++	iscandar_req_ring[tail % ISCANDAR_RING_RECORDS] = *rec;
++	smp_wmb();
++	iscandar_ctrl->req_tail = tail + 1;
++	while (iscandar_ctrl->resp_tail == tail) {
++		if (++waited > 5000) {	/* 5 s at 1 ms polls */
++			mutex_unlock(&iscandar_call_lock);
++			pr_err("iscandar: bridge timeout, op %u\n", rec->op);
++			return -ETIMEDOUT;
++		}
++		mdelay(1);
++	}
++	smp_rmb();
++	*rec = iscandar_resp_ring[tail % ISCANDAR_RING_RECORDS];
++	mutex_unlock(&iscandar_call_lock);
++	return 0;
++}
++
++/* The registry table: registry id by cache pointer, the
++ * cap the header fixes. Ids are 1-based; 0 is no cache. */
++static struct {
++	struct kmem_cache *s;
++	u32 id;
++} iscandar_caches[ISCANDAR_REGISTRY_CAP];
++
++u32 iscandar_cache_lookup(struct kmem_cache *s)
++{
++	int i;
++
++	for (i = 0; i < ISCANDAR_REGISTRY_CAP; i++)
++		if (iscandar_caches[i].s == s)
++			return iscandar_caches[i].id;
++	return 0;
++}
++
++int iscandar_cache_register(struct kmem_cache *s, size_t size,
++			    unsigned int align, unsigned long flags)
++{
++	struct IscandarBridgeRecord rec = { };
++	int i;
++
++	rec.op = ISCANDAR_OP_CACHE_CREATE;
++	rec.cookie = (u64)(uintptr_t)s;
++	rec.size = size;
++	rec.align = align;
++	rec.aux = flags;
++	if (iscandar_bridge_call(&rec) || rec.status != ISCANDAR_BRIDGE_OK)
++		return -ENOSPC;
++	for (i = 0; i < ISCANDAR_REGISTRY_CAP; i++) {
++		if (!iscandar_caches[i].s) {
++			iscandar_caches[i].s = s;
++			iscandar_caches[i].id = rec.cache_id;
++			return 0;
++		}
++	}
++	return -ENOSPC;
++}
++
++void iscandar_cache_unregister(struct kmem_cache *s)
++{
++	struct IscandarBridgeRecord rec = { };
++	int i;
++
++	rec.op = ISCANDAR_OP_CACHE_DESTROY;
++	rec.cache_id = iscandar_cache_lookup(s);
++	if (rec.cache_id
++	    && (iscandar_bridge_call(&rec)
++		|| rec.status != ISCANDAR_BRIDGE_OK))
++		pr_err("iscandar: cache %p destroy verdict %u\n",
++		       s, rec.status);
++	for (i = 0; i < ISCANDAR_REGISTRY_CAP; i++)
++		if (iscandar_caches[i].s == s) {
++			iscandar_caches[i].s = NULL;
++			iscandar_caches[i].id = 0;
++		}
++}
++
++/* gen_pool served set: a pool joins the arena set only by
++ * registration (the build names the set; the reconciliation
++ * records it as open). Unregistered pools are stock. */
++static struct gen_pool *iscandar_arena_pools[8];
++
++bool iscandar_gen_pool_is_arena(struct gen_pool *pool)
++{
++	int i;
++
++	for (i = 0; i < 8; i++)
++		if (iscandar_arena_pools[i] == pool)
++			return true;
++	return false;
++}
++
++/* The raise and the counters ride /proc/iscandar_bridge:
++ * writing "raise" checks the layer's control block and, if
++ * the magic stands, registers the prefix-born caches and
++ * opens the bridge; reading reports the counters, the watch
++ * counter among them. The proc body is staged in outline:
++ * its shape is fixed, its seq_file plumbing is the tree's
++ * own idiom and is written at application time. */
+--- a/mm/Makefile
++++ b/mm/Makefile
+@@ -1,4 +1,5 @@
+ # SPDX-License-Identifier: GPL-2.0
+ #
+ # Makefile for the linux memory manager.
+ 
++obj-y += iscandar_bridge.o

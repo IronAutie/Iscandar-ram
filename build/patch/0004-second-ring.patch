@@ -1,0 +1,101 @@
+STAGED PATCH 0004 of 5: apply after 0005.
+Targets: Linux 6.12.116, mm/percpu.c and lib/genalloc.c.
+Line anchors are the patch-point list's numbers of record;
+context lines are schematic. Re-base on the real tree
+before applying.
+
+Subject: iscandar: the second ring (4.2, 4.3); 4.1 by backing
+
+Center 4.1 (mempool) takes no hunk: a mempool over slab is
+redirected at 1.1 with its elements, and a mempool over
+pages draws on the substrate, exactly as the
+reconciliation disposes the family. The bridge protocol
+carries an op for it (OP_MEMPOOL_ALLOC) for pools whose
+element door the build wires directly; the layer answers
+the pages backing with BRIDGE_SUBSTRATE, named, not served.
+
+Center 4.2 (percpu): the redirect stands at the center, as
+ruled. Stated plainly, as the reconciliation states it:
+the chunk layer carves internally beneath this center, and
+redirecting the center is a separate design question from
+the boot-load families. The staged hunk redirects the
+center's backing: one bridge run serves the whole per-cpu
+area (size times the possible CPU count), and the chunk
+bookkeeping stays the kernel's over that run. Whether the
+chunk layer's internal carving is compatible with that
+shape is build-time design work this staging does not
+settle; it is carried as an open item in BUILD-STATUS.md.
+The center's earliest traffic (its first chunks) falls in
+the early-boot prefix and is stock and logged there, not
+missed.
+
+Center 4.3 (gen_pool): genalloc manages device and special
+memory pools, not general system RAM. The redirect is
+gated: only a pool the build has registered as an arena
+pool (0005) is served at the bridge; every other pool is
+stock, by the boundary the patch list records. The
+reconciliation follows ruling 5 for the center and records
+the served set as open; the registration gate is where the
+build names the set, one pool at a time, each naming a
+decision of record. For a registered pool, the pool's
+managed range IS the arena's kernel mapping, so the
+address the center returns is the arena base plus the
+bridge offset.
+
+--- a/mm/percpu.c
++++ b/mm/percpu.c
+@@ -1743,7 +1743,26 @@
+-void __percpu *pcpu_alloc_noprof(size_t size, size_t align, bool reserved, ...)
++void __percpu *pcpu_alloc_noprof(size_t size, size_t align, bool reserved, ...)
+ {
++	if (iscandar_active() && !reserved) {
++		struct IscandarBridgeRecord rec = { };
++
++		rec.op = ISCANDAR_OP_PERCPU_ALLOC;
++		rec.size = (u64)size * num_possible_cpus();
++		rec.align = (u32)align;
++		if (iscandar_bridge_call(&rec)
++		    || rec.status != ISCANDAR_BRIDGE_OK)
++			return NULL;
++		return (void __percpu *)
++			iscandar_offset_to_ptr(rec.result);
++	}
++	iscandar_prefix_note(ISCANDAR_CENTER_PERCPU, size);
+ 	...
+ }
+--- a/lib/genalloc.c
++++ b/lib/genalloc.c
+@@ -277,7 +277,25 @@
+-unsigned long gen_pool_alloc_algo_owner(struct gen_pool *pool, size_t size, ...)
++unsigned long gen_pool_alloc_algo_owner(struct gen_pool *pool, size_t size, ...)
+ {
++	if (iscandar_active() && iscandar_gen_pool_is_arena(pool)) {
++		struct IscandarBridgeRecord rec = { };
++
++		rec.op = ISCANDAR_OP_GENPOOL_ALLOC;
++		rec.size = size;
++		if (iscandar_bridge_call(&rec)
++		    || rec.status != ISCANDAR_BRIDGE_OK)
++			return 0;
++		return (unsigned long)
++			iscandar_offset_to_ptr(rec.result);
++	}
++	if (iscandar_active())
++		iscandar_prefix_note(ISCANDAR_CENTER_GENPOOL, size);
+ 	...
+ }
+@@ -487,5 +505,18 @@
+-void gen_pool_free_owner(struct gen_pool *pool, unsigned long addr, size_t size)
++void gen_pool_free_owner(struct gen_pool *pool, unsigned long addr, size_t size)
+ {
++	if (iscandar_gen_pool_is_arena(pool)
++	    && iscandar_ptr_in_arena((const void *)addr)) {
++		struct IscandarBridgeRecord rec = { };
++
++		rec.op = ISCANDAR_OP_GENPOOL_FREE;
++		rec.size = iscandar_ptr_to_offset((const void *)addr);
++		(void)iscandar_bridge_call(&rec);
++		return;
++	}
+ 	...
+ }
