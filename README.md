@@ -1,6 +1,6 @@
 # Iscandar-ram
 
-Paper 3: *Debian to Iscandar: Full Steam Ahead!*
+Paper 3: *Debian to Iscandar: Full Speed Ahead!*
 
 Subtitle: *Installing the RAM*
 

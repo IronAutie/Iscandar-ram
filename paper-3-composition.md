@@ -1,10 +1,10 @@
-# Composition ledger: Debian to Iscandar: Full Steam Ahead!
+# Composition ledger: Debian to Iscandar: Full Speed Ahead!
 
 ## Subtitle: Installing the RAM
 
 ## Bibliographic record
 
-- **Title of record:** Debian to Iscandar: Full Steam Ahead!
+- **Title of record:** Debian to Iscandar: Full Speed Ahead!
 - **Subtitle:** Installing the RAM
 - **Author:** Andrew Jonathan Fine
 - **Dedication:** To Jennifer: Everything. Always. Forever.
@@ -315,3 +315,5 @@ Addendum 2026-11-11 (evening, last): the cache registry item was pushed to Overl
 Addendum 2026-11-11 (evening, last): section 6's gaps item corrected under Andrew's stet: the watch point line now reads that alloc_slab_page was settled by no input and answered by ruling, bypass outright, SLUB keeping no bookkeeping over Iscandar grants. With this correction, no manuscript wording known to be stale remains; every section stands stetted and current.
 
 Addendum 2026-11-11 (evening, last): the section 6 watch point correction was pushed to Overleaf the same day; the pre-push diff was the status comment and the one gaps line. Verified there: compile clean (0 errors, 0 warnings), 12 pages, all 17 headings unchanged, copies identical.
+
+Addendum 2026-11-11 (evening, last): RETITLE. Andrew made a new copy of the Overleaf project to work in, and its title page reads "Full Speed Ahead!"; asked whether Speed is the new title of record, he confirmed yes (2026-11-11). The title of record is now "Debian to Iscandar: Full Speed Ahead!" (subtitle "Installing the RAM" unchanged), adopted in paper-3.tex, README.md, and this ledger's header. The new copy's body was verified current from a PDF Andrew supplied: 12 pages, the cache registry item, section 6's corrected watch point line, and section 10's substrate sentence all present. The new project's ID is not yet on record; the next Overleaf sync needs it, and goes to the new copy. The old project (6af1212f5d645cc7839f0f84) stands as the previous version under the Steam title.
