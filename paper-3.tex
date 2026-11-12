@@ -227,21 +227,22 @@ promoted here to evidence.
 \end{itemize}
 
 \section{Automatic Boot and the Page Exerciser}
-% Status: DESIGNED, NOT YET EXECUTED. The step's design is
-% recorded in the composition ledger; the exerciser's candidate
-% pattern stands in paper-3-exerciser-pattern-DRAFT.md,
-% unapproved. At Andrew's direction (2026-11-10) this section
-% stands on the pattern's shape; its exact counts enter the
-% paper later, as part of the prediction sheet itself. Laid
-% down 2026-11-10 at Andrew's direction, in the itemized style
-% of the Sift section, after being shown to him in draft.
+% Status: DESIGNED, NOT YET EXECUTED; resolved as stet by
+% Andrew 2026-11-11. The step's design is recorded in the
+% composition ledger. The exerciser's pattern was finished
+% 2026-11-11 (paper-3-exerciser-pattern.md: scale factor 16,
+% the two largest classes as anchors) and implemented as a
+% boot-up application (exerciser/ in this repo). Its exact
+% counts enter the paper later, as part of the prediction
+% sheet itself. Laid down 2026-11-10 at Andrew's direction,
+% in the itemized style of the Sift section.
 
 \begin{itemize}
 \item It opens with the question the step answers: how do you run the patched system so that the evidence is complete, repeatable, and untouched by human timing, and so that part of the load is known exactly in advance?
 \item Then the arrangement: the patched Fubuki boots unattended under QEMU at 512 MB, with the page tracepoints armed from t=0; a boot service runs the exerciser; and the finish step exports the trace and the exerciser's ledger and shuts the guest down. Two workloads share the boot: the system's own startup, uncontrolled, and the exerciser, controlled to the last allocation.
 \item Then the exerciser itself: a fixed program of page allocations in classes from 1 to 128 pages, arranged in phases, a build-up, a partial release that leaves anchors standing, churn cycles that re-allocate exactly what was released, and a final drain to zero. It writes its own ledger as it runs. It opens with a console menu under a 10-second timeout whose default is the standard run, the extended run with more churn standing as the second option, because the evidence boot is unattended and the menu exists for the rehearsals.
 \item Then the discipline that gives the step its force: because the program is fixed, a prediction sheet is computed from the program alone before any run, counts, sizes, peak, and end state, and the audit will print predicted against actual. The prediction is never edited after a run; a mismatch is a finding.
-\item Then the boundary, stated in the section rather than apologized for later: this step is designed, not yet executed; first rehearsals run in a stand-in guest, and the evidence run uses the ELBE-built Fubuki image, preserving its lineage; and what the exerciser's page-level results will mean under the patched kernel depends on the page-allocator ruling, which remains open.
+\item Then the boundary, stated in the section rather than apologized for later: this step is designed, not yet executed; first rehearsals run in a stand-in guest, and the evidence run uses the ELBE-built Fubuki image, preserving its lineage; and the exerciser's page-level requests are served through the page allocator, which stands underneath as substrate by ruling, and its results are read in that light.
 \item And it closes with the hand-off: the boot produces the trace and the ledger; the audit, the paper's last step, is where they are read against the prediction and against the control.
 \end{itemize}
 
