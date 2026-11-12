@@ -1,0 +1,447 @@
+<!--
+Telezart "Fubuki" target, DRAFT v1, 2026-11-03.
+Authored by Muse at Andrew Fine's direction; his build, his review.
+ELBE 15.9, modelled on the upstream amd64-bookworm hdimg example with
+the kernel handed in by QEMU at boot time (Andrew's decision,
+2026-11-03): the linux-image package is in the target so the image
+carries the matching modules and generates the initramfs, and the
+finetuning exports fixed-name copies of vmlinuz and initrd as build
+artifacts for the QEMU command line. No kernel or Debian source is
+modified anywhere; capture uses the stock kernel's own kmem
+tracepoints, switched on at runtime.
+-->
+<!--
+Iscandar live-build variant, 2026-11-11. This is the stock
+Fubuki target above with the Paper 3 stack's finetuning
+added, for the evidence boot: Fubuki linked to the Iscandar
+RAM system. The linkage, end to end: the kernel this image
+serves under is the patched kernel handed in by QEMU (the
+staged patch set is build/patch/ in the Iscandar-ram repo);
+the patched centers speak the bridge protocol whose one
+shared definition is build/bridge/iscandar_bridge.h; the
+user-space translation layer serves them from the arena
+this image's boot raises; the exerciser runs after the
+layer is up; the finish step runs after the exerciser.
+
+Changes against the stock car:
+1. The Iscandar units and scripts are installed inline
+   below, as checked copies: the link-check in the repo
+   diffs each inline body against its file of record.
+2. The constants file the boot reads is installed at
+   /usr/local/share/iscandar/iscandar-build.conf, generated
+   from the shared header (a checked copy likewise).
+3. telezart-autostop stays installed but is NOT enabled in
+   this variant: its multi-user timing predates the
+   exerciser in the evidence boot, so iscandar-finish is
+   the finish step (it runs the stock telezart-stop and
+   telezart-stats itself, exports, and powers off).
+4. The two compiled payloads (the layer, the exerciser)
+   ride the host share at first boot: ELBE finetuning
+   carries text into an image, not host binaries, and the
+   Fubuki arrangement already hands its kernel in the same
+   way. iscandar-payload-install stages them from
+   iscandar-payload/ in the share; a missing payload is a
+   loud failure, never a quiet boot without the stack.
+The evidence boot line adds, beside the trace arming of
+record: iscandar_channel= and iscandar_arena= naming the
+reserved regions of the compile-time map (build/
+compile-time-map.md), and the -virtfs share the payload and
+the exports ride.
+-->
+<ns0:RootFileSystem xmlns:ns0="https://www.linutronix.de/projects/Elbe"
+		    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+		    created="2009-05-20T08:50:56" revision="6"
+		    xsi:schemaLocation="https://www.linutronix.de/projects/Elbe dbsfed.xsd">
+
+	<project>
+		<name>telezart-fubuki</name>
+		<version>0.1</version>
+		<suite>trixie</suite>
+		<buildtype>amd64</buildtype>
+
+		<description>
+			Telezart stock car: minimal Debian trixie, systemd,
+			serial console, built to boot in QEMU at 128 MiB for
+			the higher-level kmalloc-family trace capture (actual byte
+			requests) that feeds the Iscandar replay.
+			Iscandar variant: the same car linked to the Iscandar
+			RAM system for the Paper 3 evidence boot.
+		</description>
+
+		<mirror>
+			<primary_host>deb.debian.org</primary_host>
+			<primary_path>/debian</primary_path>
+			<primary_proto>http</primary_proto>
+		</mirror>
+	</project>
+
+	<target>
+		<hostname>fubuki</hostname>
+		<passwd>fubuki</passwd>
+		<console>ttyS0,115200</console>
+
+		<images>
+			<msdoshd>
+				<name>fubuki.img</name>
+				<size>2000MiB</size>
+				<partition>
+					<size>1990MiB</size>
+					<label>rfs</label>
+				</partition>
+			</msdoshd>
+		</images>
+
+		<fstab>
+			<bylabel>
+				<label>rfs</label>
+				<mountpoint>/</mountpoint>
+				<fs><type>ext4</type></fs>
+			</bylabel>
+		</fstab>
+
+		<pkg-list>
+			<pkg>linux-image-amd64</pkg>
+			<pkg>initramfs-tools</pkg>
+			<pkg>kmod</pkg>
+			<pkg>systemd</pkg>
+			<pkg>bash</pkg>
+			<pkg>coreutils</pkg>
+			<pkg>util-linux</pkg>
+			<pkg>procps</pkg>
+		</pkg-list>
+
+		<finetuning>
+			<!-- Export kernel and initramfs under fixed names for QEMU -->
+			<command>cp /boot/vmlinuz-* /boot/telezart-vmlinuz &amp;&amp; cp /boot/initrd.img-* /boot/telezart-initrd &amp;&amp; cp /boot/config-* /boot/telezart-kconfig</command>
+			<artifact>/boot/telezart-vmlinuz</artifact>
+			<artifact>/boot/telezart-initrd</artifact>
+			<artifact>/boot/telezart-kconfig</artifact>
+
+			<!-- Keep the image lean -->
+			<rm>var/cache/apt/archives/*.deb</rm>
+
+			<!-- Runtime capture helper: switches on the stock
+			     kernel's own kmem tracepoints and snapshots the
+			     /proc counters before and after. Operates the
+			     machine; modifies nothing. -->
+			<file dst="/usr/local/sbin/telezart-capture" mode="755">#!/bin/sh
+# Telezart trace capture (runtime activation only)
+set -e
+mount -t tracefs tracefs /sys/kernel/tracing 2&gt;/dev/null || true
+cd /sys/kernel/tracing
+cat /proc/buddyinfo &gt; /root/counters-before.txt
+cat /proc/pagetypeinfo &gt;&gt; /root/counters-before.txt
+cat /proc/vmstat &gt;&gt; /root/counters-before.txt
+cat /proc/meminfo &gt;&gt; /root/counters-before.txt
+dd if=/proc/kpageflags of=/root/kpageflags-before.bin bs=8 status=none
+for e in kmalloc kmalloc_node kmem_cache_alloc kmem_cache_alloc_node kfree kmem_cache_free; do if [ -e events/kmem/$e/enable ]; then echo 1 &gt; events/kmem/$e/enable; fi; done
+echo "capture on: trace running to /root/telezart-trace.txt"
+echo "stop with: telezart-stop (or kill the cat, then sync)"
+cat trace_pipe &gt; /root/telezart-trace.txt &amp;
+</file>
+			<file dst="/usr/local/sbin/telezart-stop" mode="755">#!/bin/sh
+# Telezart trace stop: disable events, snapshot counters, sync
+cd /sys/kernel/tracing 2&gt;/dev/null || exit 0
+for e in kmalloc kmalloc_node kmem_cache_alloc kmem_cache_alloc_node kfree kmem_cache_free; do if [ -e events/kmem/$e/enable ]; then echo 0 &gt; events/kmem/$e/enable; fi; done
+cat trace &gt; /root/telezart-trace-boot.txt
+pkill -f "cat trace_pipe" || true
+cat /proc/buddyinfo &gt; /root/counters-after.txt
+cat /proc/pagetypeinfo &gt;&gt; /root/counters-after.txt
+cat /proc/vmstat &gt;&gt; /root/counters-after.txt
+cat /proc/meminfo &gt;&gt; /root/counters-after.txt
+dd if=/proc/kpageflags of=/root/kpageflags-after.bin bs=8 status=none
+sync
+echo "capture stopped; trace and counters are in /root"
+</file>
+			<!-- Automatic stop at login readiness (Andrew's order,
+			     2026-11-03): when the boot is armed by the
+			     trace_event kernel parameter, this unit fires
+			     telezart-stop as multi-user is reached, so the
+			     tracing turns itself off at the login boundary
+			     with no human timing. Harmless on unarmed boots:
+			     the dump simply holds whatever the buffer has. -->
+						<file dst="/usr/local/sbin/telezart-stats" mode="755">#!/bin/sh
+# Telezart in-guest statistics for the boot trace.
+# Counts everything from /root/telezart-trace-boot.txt and writes
+# the ledger to /root/telezart-stats.txt. Pointer matching joins
+# each free to its allocation; the pointers in ftrace output are
+# the kernel's hashed tokens, consistent within one boot, which
+# is all the matching needs.
+T=/root/telezart-trace-boot.txt
+S=/root/telezart-stats.txt
+[ -f "$T" ] || { echo "no trace at $T"; exit 1; }
+awk '
+function bucket(b){ return (b&lt;=64?"le64":b&lt;=256?"b65_256":b&lt;=1024?"b257_1024":b&lt;=8192?"b1025_8192":"gt8192") }
+{
+  ev=""; ptr=""; br=-1; ba=-1;
+  for(i=1;i&lt;=NF;i++){
+    if($i=="kmalloc:"||$i=="kmem_cache_alloc:"){ ev="alloc"; fam=$i }
+    else if($i=="kfree:"||$i=="kmem_cache_free:"){ ev="free"; fam=$i }
+    else if($i ~ /^ptr=/){ split($i,a,"="); ptr=a[2] }
+    else if($i ~ /^bytes_req=/){ split($i,a,"="); br=a[2] }
+    else if($i ~ /^bytes_alloc=/){ split($i,a,"="); ba=a[2] }
+  }
+  if(ev==""){ next }
+  cnt[fam]++
+  if(ev=="alloc"){
+    nalloc++; sreq+=br; salloc+=ba; if(br&gt;maxreq) maxreq=br;
+    h[bucket(br)]++;
+    if(ptr in live){ replaced++; livebytes-=live[ptr] } else { nlive++ }
+    live[ptr]=br; g_live[ptr]=ba; livebytes+=br;
+    if(livebytes&gt;peakbytes) peakbytes=livebytes;
+    if(nlive&gt;peakobjs) peakobjs=nlive;
+  } else {
+    if(ptr in live){
+      freedreq+=live[ptr]; freedalloc+=g_live[ptr];
+      livebytes-=live[ptr]; delete live[ptr]; delete g_live[ptr];
+      nlive--; nfreematched++;
+    } else nfreeunmatched++;
+  }
+}
+END{
+  MiB=1048576;
+  printf "Telezart boot trace ledger\n";
+  printf "events kmalloc %d kmem_cache_alloc %d kfree %d kmem_cache_free %d\n", cnt["kmalloc:"], cnt["kmem_cache_alloc:"], cnt["kfree:"], cnt["kmem_cache_free:"];
+  printf "allocations %d  sum_req %d bytes (%.2f MiB)  sum_alloc %d bytes (%.2f MiB)  max_req %d\n", nalloc, sreq, sreq/MiB, salloc, salloc/MiB, maxreq;
+  printf "frees matched %d  freed_req %d bytes (%.2f MiB)  freed_alloc %d bytes (%.2f MiB)\n", nfreematched, freedreq, freedreq/MiB, freedalloc, freedalloc/MiB;
+  printf "frees unmatched (pre-window objects) %d  replaced-pointer allocs %d\n", nfreeunmatched, replaced;
+  printf "difference req %.2f MiB  alloc %.2f MiB\n", (sreq-freedreq)/MiB, (salloc-freedalloc)/MiB;
+  printf "peak live %d bytes (%.2f MiB) in %d objects\n", peakbytes, peakbytes/MiB, peakobjs;
+  printf "live at end %d bytes (%.2f MiB) in %d objects\n", livebytes, livebytes/MiB, nlive;
+  printf "histogram le64 %d  65-256 %d  257-1024 %d  1025-8192 %d  gt8192 %d\n", h["le64"], h["b65_256"], h["b257_1024"], h["b1025_8192"], h["gt8192"];
+}' "$T" &gt; "$S"
+# Percentiles of bytes_req: sort the request sizes once.
+grep -o 'bytes_req=[0-9]*' "$T" | cut -d= -f2 | sort -n &gt; /tmp/telezart-sizes.txt
+N=$(wc -l &lt; /tmp/telezart-sizes.txt)
+if [ "$N" -gt 0 ]; then
+  for P in 20 50 80; do
+    R=$(( (N * P + 99) / 100 )); [ "$R" -lt 1 ] &amp;&amp; R=1
+    V=$(sed -n "${R}p" /tmp/telezart-sizes.txt)
+    echo "P${P} bytes_req $V" &gt;&gt; "$S"
+  done
+fi
+rm -f /tmp/telezart-sizes.txt
+echo "stats written to $S"
+</file>
+			<file dst="/usr/local/sbin/telezart-finish" mode="755">#!/bin/sh
+# Telezart finish: stop the trace, count everything, and walk
+# the results out the virtio door into the host share folder, so
+# nobody has to mount and unmount the disk image ever again.
+telezart-stop || true
+telezart-stats || true
+modprobe 9pnet_virtio 2&gt;/dev/null || true
+mkdir -p /mnt/tzshare
+if mount -t 9p -o trans=virtio,version=9p2000.L tzshare /mnt/tzshare 2&gt;/dev/null; then
+  cp /root/telezart-trace-boot.txt /mnt/tzshare/ 2&gt;/dev/null || true
+  cp /root/telezart-trace.txt /mnt/tzshare/ 2&gt;/dev/null || true
+  cp /root/telezart-stats.txt /mnt/tzshare/ 2&gt;/dev/null || true
+  cp /root/counters-before.txt /root/counters-after.txt /mnt/tzshare/ 2&gt;/dev/null || true
+  cp /root/kpageflags-before.bin /root/kpageflags-after.bin /mnt/tzshare/ 2&gt;/dev/null || true
+  sync
+  umount /mnt/tzshare
+  echo "telezart: results exported to the host share"
+else
+  echo "telezart: no host share mounted; results remain in /root"
+fi
+</file>
+			<file dst="/etc/systemd/system/telezart-autostop.service">[Unit]
+Description=Telezart automatic trace stop at login readiness
+DefaultDependencies=no
+After=local-fs.target
+Before=multi-user.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/telezart-finish
+
+[Install]
+WantedBy=multi-user.target
+</file>
+			<!-- ISCANDAR-PAYLOAD-MANIFEST (repo paths; the link-check verifies each exists)
+				build/bin/iscandar-layer
+				build/bin/iscandar-exerciser
+				build/constants/iscandar-build.conf
+				build/units/iscandar-payload-install
+				build/units/iscandar-payload.service
+				build/units/iscandar-layer.service
+				build/units/iscandar-raise.service
+				build/units/iscandar-finish
+				build/units/iscandar-finish.service
+				exerciser/iscandar-exerciser.service
+			-->
+			<!-- Iscandar live build: the constants file the boot reads -->
+			<file dst="/usr/local/share/iscandar/iscandar-build.conf"># iscandar-build.conf -- GENERATED from build/bridge/iscandar_bridge.h
+# by build/gen-build-conf.sh. Do not hand-edit; the link-check diffs it.
+ISCANDAR_PAGE_BYTES=4096
+ISCANDAR_CUBE_PAGES=32768
+ISCANDAR_ARENA_CUBES=4
+ISCANDAR_ARENA_PAGES=131072
+ISCANDAR_ARENA_BYTES=536870912
+ISCANDAR_FIXTURE_PAGES_TOTAL=84
+ISCANDAR_NET_SERVED_PAGES=130988
+ISCANDAR_REGISTRY_CAP=512
+ISCANDAR_REGISTRY_PAGES=8
+ISCANDAR_CHANNEL_PAGES=128
+ISCANDAR_CHANNEL_BYTES=524288
+ISCANDAR_LAYER_RESERVE_PAGES=160
+</file>
+			<!-- Iscandar live build: payload install, layer, raise, exerciser, finish -->
+			<file dst="/usr/local/sbin/iscandar-payload-install" mode="755">#!/bin/sh
+# Iscandar payload install (first boot). The ELBE finetuning
+# carries text (units, scripts, the constants file) into the
+# image; the two compiled payloads ride the host share, the
+# same door the kernel and initrd already come through in
+# the Fubuki arrangement. This script installs them before
+# the translation layer's unit can start. A missing payload
+# is a loud failure on the console, never a quiet boot
+# without the stack.
+modprobe 9pnet_virtio 2&gt;/dev/null || true
+mkdir -p /mnt/tzshare
+if ! mount -t 9p -o trans=virtio,version=9p2000.L tzshare /mnt/tzshare 2&gt;/dev/null; then
+  echo "iscandar-payload: host share not mounted; the Iscandar payload is missing"
+  exit 1
+fi
+ok=1
+for f in iscandar-layer iscandar-exerciser; do
+  if [ -f "/mnt/tzshare/iscandar-payload/$f" ]; then
+    install -m 0755 "/mnt/tzshare/iscandar-payload/$f" "/usr/local/sbin/$f"
+  else
+    echo "iscandar-payload: $f missing from the share's iscandar-payload folder"
+    ok=0
+  fi
+done
+umount /mnt/tzshare
+[ "$ok" = 1 ] || exit 1
+echo "iscandar-payload: installed iscandar-layer and iscandar-exerciser"
+</file>
+			<file dst="/etc/systemd/system/iscandar-payload.service">[Unit]
+Description=Iscandar payload install from the host share
+DefaultDependencies=no
+After=local-fs.target
+Before=iscandar-layer.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/iscandar-payload-install
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target
+</file>
+			<file dst="/etc/systemd/system/iscandar-layer.service">[Unit]
+Description=Iscandar translation layer (Paper 3 live build)
+After=iscandar-payload.service local-fs.target
+Before=iscandar-exerciser.service
+ConditionPathExists=/usr/local/sbin/iscandar-layer
+
+[Service]
+Type=simple
+ExecStartPre=/bin/mkdir -p /run/iscandar /var/log/iscandar
+ExecStartPre=/bin/rm -f /run/iscandar/channel.bin
+ExecStart=/usr/local/sbin/iscandar-layer --serve /run/iscandar/channel.bin
+StandardOutput=journal+console
+StandardError=journal+console
+Restart=no
+
+[Install]
+WantedBy=multi-user.target
+</file>
+			<file dst="/etc/systemd/system/iscandar-raise.service">[Unit]
+Description=Open the kernel bridge to the raised layer
+After=iscandar-layer.service
+Before=iscandar-exerciser.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'for i in $(seq 1 50); do if grep -q "state ready" /proc/iscandar_bridge 2&gt;/dev/null; then exit 0; fi; echo raise &gt; /proc/iscandar_bridge 2&gt;/dev/null || true; sleep 0.2; done; echo "iscandar-raise: the bridge did not come up" &gt;&amp;2; exit 1'
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target
+</file>
+			<file dst="/etc/systemd/system/iscandar-exerciser.service">[Unit]
+Description=Iscandar page exerciser (Paper 3 evidence run)
+Documentation=file:/usr/local/share/doc/iscandar-exerciser/README.md
+After=multi-user.target
+# The evidence rig's finish service (trace export and shutdown)
+# orders itself After=iscandar-exerciser.service.
+
+[Service]
+Type=oneshot
+ExecStartPre=/bin/mkdir -p /var/log/iscandar-exerciser
+ExecStart=/usr/local/sbin/iscandar-exerciser
+StandardInput=tty
+TTYPath=/dev/console
+StandardOutput=journal+console
+StandardError=journal+console
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target
+</file>
+			<file dst="/usr/local/sbin/iscandar-finish" mode="755">#!/bin/sh
+# Iscandar finish: stop the layer, harvest the run's books,
+# run the stock Telezart stop and stats, and export
+# everything through the 9p share, mirroring telezart-finish
+# with the Iscandar harvest added in front of the same door.
+# The patched image does not enable telezart-autostop: its
+# multi-user timing predates the exerciser in the evidence
+# boot, so this script is the finish step, and the unit
+# powers the guest off after it.
+CHAN=/run/iscandar/channel.bin
+# The stop word: offset 264 in the channel file, fixed by the
+# shared header's control layout; the layer carries a
+# compile-time assertion on the offset.
+if [ -f "$CHAN" ]; then
+  printf '\001\000\000\000' | dd of="$CHAN" bs=1 seek=264 count=4 conv=notrunc status=none
+fi
+for i in $(seq 1 50); do
+  pgrep -x iscandar-layer &gt;/dev/null || break
+  sleep 0.2
+done
+mkdir -p /root/iscandar-results
+cp /var/log/iscandar/layer-ledger.txt /root/iscandar-results/ 2&gt;/dev/null || true
+cp iscandar-layer-ledger.txt /root/iscandar-results/ 2&gt;/dev/null || true
+cp /var/log/iscandar-exerciser/ledger.txt /root/iscandar-results/exerciser-ledger.txt 2&gt;/dev/null || true
+cp "$CHAN" /root/iscandar-results/channel-snapshot.bin 2&gt;/dev/null || true
+cat /proc/iscandar_bridge &gt; /root/iscandar-results/proc-iscandar-bridge.txt 2&gt;/dev/null || true
+cp /usr/local/share/iscandar/iscandar-build.conf /root/iscandar-results/ 2&gt;/dev/null || true
+telezart-stop || true
+telezart-stats || true
+modprobe 9pnet_virtio 2&gt;/dev/null || true
+mkdir -p /mnt/tzshare
+if mount -t 9p -o trans=virtio,version=9p2000.L tzshare /mnt/tzshare 2&gt;/dev/null; then
+  cp /root/telezart-trace-boot.txt /mnt/tzshare/ 2&gt;/dev/null || true
+  cp /root/telezart-trace.txt /mnt/tzshare/ 2&gt;/dev/null || true
+  cp /root/telezart-stats.txt /mnt/tzshare/ 2&gt;/dev/null || true
+  cp /root/counters-before.txt /root/counters-after.txt /mnt/tzshare/ 2&gt;/dev/null || true
+  cp /root/kpageflags-before.bin /root/kpageflags-after.bin /mnt/tzshare/ 2&gt;/dev/null || true
+  cp -r /root/iscandar-results /mnt/tzshare/ 2&gt;/dev/null || true
+  sync
+  umount /mnt/tzshare
+  echo "iscandar-finish: results exported to the host share"
+else
+  echo "iscandar-finish: no host share mounted; results remain in /root"
+fi
+</file>
+			<file dst="/etc/systemd/system/iscandar-finish.service">[Unit]
+Description=Iscandar finish: export the evidence, then shut down
+After=iscandar-exerciser.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/iscandar-finish
+ExecStart=/bin/systemctl poweroff
+StandardOutput=journal+console
+StandardError=journal+console
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target
+</file>
+			<command>mkdir -p /etc/systemd/system/multi-user.target.wants &amp;&amp; cd /etc/systemd/system/multi-user.target.wants &amp;&amp; ln -sf ../iscandar-payload.service . &amp;&amp; ln -sf ../iscandar-layer.service . &amp;&amp; ln -sf ../iscandar-raise.service . &amp;&amp; ln -sf ../iscandar-exerciser.service . &amp;&amp; ln -sf ../iscandar-finish.service .</command>
+		</finetuning>
+	</target>
+</ns0:RootFileSystem>
