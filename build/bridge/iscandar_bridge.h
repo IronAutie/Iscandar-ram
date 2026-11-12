@@ -180,7 +180,7 @@ typedef struct {
     uint32_t cache_id;
     uint64_t result;
     uint64_t aux;
-    uint8_t  reserved[8];
+    uint8_t  reserved[16];
 } IscandarBridgeRecord;
 
 /* ---- The channel control block ------------------------------
