@@ -1,0 +1,14 @@
+[Unit]
+Description=Iscandar finish: export the evidence, then shut down
+After=iscandar-exerciser.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/iscandar-finish
+ExecStart=/bin/systemctl poweroff
+StandardOutput=journal+console
+StandardError=journal+console
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target

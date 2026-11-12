@@ -45,6 +45,7 @@
 
 #include <fcntl.h>
 #include <stdarg.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -70,6 +71,12 @@ typedef char assert_control_fits[
     (sizeof(IscandarChannelControl) <= ISCANDAR_PAGE_BYTES) ? 1 : -1];
 typedef char assert_prefix_16[
     (sizeof(IscandarPrefixEntry) == ISCANDAR_PREFIX_ENTRY_BYTES) ? 1 : -1];
+/* The finish script sets the stop word at a fixed offset in
+ * the channel file; this assertion ties that offset to the
+ * header's struct, so a layout change breaks this build
+ * rather than the bench run. */
+typedef char assert_stop_offset[
+    (offsetof(IscandarChannelControl, stop) == 264) ? 1 : -1];
 
 /* The cache registry entry: the layer's bookkeeping for one
  * named cache. 64 bytes, the size the map charges. */

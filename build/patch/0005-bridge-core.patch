@@ -286,9 +286,13 @@ the prefix.
 + * writing "raise" checks the layer's control block and, if
 + * the magic stands, registers the prefix-born caches and
 + * opens the bridge; reading reports the counters, the watch
-+ * counter among them. The proc body is staged in outline:
-+ * its shape is fixed, its seq_file plumbing is the tree's
-+ * own idiom and is written at application time. */
++ * counter among them. The read's first line is the state
++ * line, exactly "state ready" once the bridge is open and
++ * "state prefix" before it: the boot's raise unit greps
++ * for it, so the wording is part of the contract. The proc
++ * body is staged in outline: its shape is fixed, its
++ * seq_file plumbing is the tree's own idiom and is written
++ * at application time. */
 --- a/mm/Makefile
 +++ b/mm/Makefile
 @@ -1,4 +1,5 @@

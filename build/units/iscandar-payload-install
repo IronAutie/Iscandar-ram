@@ -1,0 +1,27 @@
+#!/bin/sh
+# Iscandar payload install (first boot). The ELBE finetuning
+# carries text (units, scripts, the constants file) into the
+# image; the two compiled payloads ride the host share, the
+# same door the kernel and initrd already come through in
+# the Fubuki arrangement. This script installs them before
+# the translation layer's unit can start. A missing payload
+# is a loud failure on the console, never a quiet boot
+# without the stack.
+modprobe 9pnet_virtio 2>/dev/null || true
+mkdir -p /mnt/tzshare
+if ! mount -t 9p -o trans=virtio,version=9p2000.L tzshare /mnt/tzshare 2>/dev/null; then
+  echo "iscandar-payload: host share not mounted; the Iscandar payload is missing"
+  exit 1
+fi
+ok=1
+for f in iscandar-layer iscandar-exerciser; do
+  if [ -f "/mnt/tzshare/iscandar-payload/$f" ]; then
+    install -m 0755 "/mnt/tzshare/iscandar-payload/$f" "/usr/local/sbin/$f"
+  else
+    echo "iscandar-payload: $f missing from the share's iscandar-payload folder"
+    ok=0
+  fi
+done
+umount /mnt/tzshare
+[ "$ok" = 1 ] || exit 1
+echo "iscandar-payload: installed iscandar-layer and iscandar-exerciser"

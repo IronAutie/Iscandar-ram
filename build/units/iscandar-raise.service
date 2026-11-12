@@ -1,0 +1,13 @@
+[Unit]
+Description=Open the kernel bridge to the raised layer
+After=iscandar-layer.service
+Before=iscandar-exerciser.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'for i in $(seq 1 50); do if grep -q "state ready" /proc/iscandar_bridge 2>/dev/null; then exit 0; fi; echo raise > /proc/iscandar_bridge 2>/dev/null || true; sleep 0.2; done; echo "iscandar-raise: the bridge did not come up" >&2; exit 1'
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,17 @@
+[Unit]
+Description=Iscandar translation layer (Paper 3 live build)
+After=iscandar-payload.service local-fs.target
+Before=iscandar-exerciser.service
+ConditionPathExists=/usr/local/sbin/iscandar-layer
+
+[Service]
+Type=simple
+ExecStartPre=/bin/mkdir -p /run/iscandar /var/log/iscandar
+ExecStartPre=/bin/rm -f /run/iscandar/channel.bin
+ExecStart=/usr/local/sbin/iscandar-layer --serve /run/iscandar/channel.bin
+StandardOutput=journal+console
+StandardError=journal+console
+Restart=no
+
+[Install]
+WantedBy=multi-user.target

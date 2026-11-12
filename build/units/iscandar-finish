@@ -1,0 +1,44 @@
+#!/bin/sh
+# Iscandar finish: stop the layer, harvest the run's books,
+# run the stock Telezart stop and stats, and export
+# everything through the 9p share, mirroring telezart-finish
+# with the Iscandar harvest added in front of the same door.
+# The patched image does not enable telezart-autostop: its
+# multi-user timing predates the exerciser in the evidence
+# boot, so this script is the finish step, and the unit
+# powers the guest off after it.
+CHAN=/run/iscandar/channel.bin
+# The stop word: offset 264 in the channel file, fixed by the
+# shared header's control layout; the layer carries a
+# compile-time assertion on the offset.
+if [ -f "$CHAN" ]; then
+  printf '\001\000\000\000' | dd of="$CHAN" bs=1 seek=264 count=4 conv=notrunc status=none
+fi
+for i in $(seq 1 50); do
+  pgrep -x iscandar-layer >/dev/null || break
+  sleep 0.2
+done
+mkdir -p /root/iscandar-results
+cp /var/log/iscandar/layer-ledger.txt /root/iscandar-results/ 2>/dev/null || true
+cp iscandar-layer-ledger.txt /root/iscandar-results/ 2>/dev/null || true
+cp /var/log/iscandar-exerciser/ledger.txt /root/iscandar-results/exerciser-ledger.txt 2>/dev/null || true
+cp "$CHAN" /root/iscandar-results/channel-snapshot.bin 2>/dev/null || true
+cat /proc/iscandar_bridge > /root/iscandar-results/proc-iscandar-bridge.txt 2>/dev/null || true
+cp /usr/local/share/iscandar/iscandar-build.conf /root/iscandar-results/ 2>/dev/null || true
+telezart-stop || true
+telezart-stats || true
+modprobe 9pnet_virtio 2>/dev/null || true
+mkdir -p /mnt/tzshare
+if mount -t 9p -o trans=virtio,version=9p2000.L tzshare /mnt/tzshare 2>/dev/null; then
+  cp /root/telezart-trace-boot.txt /mnt/tzshare/ 2>/dev/null || true
+  cp /root/telezart-trace.txt /mnt/tzshare/ 2>/dev/null || true
+  cp /root/telezart-stats.txt /mnt/tzshare/ 2>/dev/null || true
+  cp /root/counters-before.txt /root/counters-after.txt /mnt/tzshare/ 2>/dev/null || true
+  cp /root/kpageflags-before.bin /root/kpageflags-after.bin /mnt/tzshare/ 2>/dev/null || true
+  cp -r /root/iscandar-results /mnt/tzshare/ 2>/dev/null || true
+  sync
+  umount /mnt/tzshare
+  echo "iscandar-finish: results exported to the host share"
+else
+  echo "iscandar-finish: no host share mounted; results remain in /root"
+fi
