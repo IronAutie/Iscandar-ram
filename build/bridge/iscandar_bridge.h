@@ -116,7 +116,9 @@
 #define ISCANDAR_CENTER_MEMPOOL         41  /* 4.1 mempool_alloc_noprof */
 #define ISCANDAR_CENTER_PERCPU          42  /* 4.2 pcpu_alloc_noprof */
 #define ISCANDAR_CENTER_GENPOOL         43  /* 4.3 gen_pool_alloc_algo_owner */
-#define ISCANDAR_CENTER_COUNT           16
+/* The prefix counters in the control block are indexed by
+ * center id directly; the ids run to 43, so the array is 48. */
+#define ISCANDAR_CENTER_COUNT           48
 
 /* ---- Operations ---------------------------------------------
  * One record crosses per call. The op names the reconciled
