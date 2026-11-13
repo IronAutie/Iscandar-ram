@@ -77,3 +77,22 @@ CONFIG_HAS_DMA; drivers/base/devres.o is in the base core list.
   on 6.12.116 defconfig, and Fubuki's configuration has
   CONFIG_SLUB=y with SLUB_TINY unset, so `__fastpath_inline`
   resolves the same way in her kernel.
+
+Correction 2026-11-12 (at Andrew's stet): this enumeration was
+read against the stock trixie config of linux-image
+6.12.113+deb13-amd64, fetched 2026-11-10 and taken at the time
+as Fubuki's configuration. The byte-check run on 2026-11-12
+established that Fubuki's kernel is 6.12.107+deb13-amd64
+(vmlinuz version string, Debian 6.12.107-1) and that the
+build's own exported config, `telezart-kconfig` in both ELBE
+build directories on telesart, is the 6.12.107 config (11,466
+lines, SHA-256
+9b460f1003db4d417288e9c14caecfa14245dab07186df948fef0f3661e38ceb).
+The version difference stated in this artifact therefore
+reads 6.12.116 against 6.12.107. The load-bearing options are
+verified on the build's own config: CONFIG_SLUB=y,
+CONFIG_CMA not set. The enumeration's per-point verdicts stand
+as read, pending the full gating-symbol re-reading against
+the 6.12.107 config, which is the open follow-up; the method
+section above is unchanged as the record of how the
+enumeration was actually performed.

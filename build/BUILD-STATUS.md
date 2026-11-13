@@ -159,8 +159,9 @@ left untouched.
 
 1. Entry check: in `build/`, run `./link-check.sh`. All
    eleven checks should pass there as they do here.
-2. Prepare the Linux 6.12.116 source tree (the Fubuki
-   kernel's version, per the target description of record).
+2. Prepare the Linux 6.12.116 source tree (the patch
+   target of record; Fubuki's own kernel is 6.12.107,
+   byte-checked 2026-11-12).
    Record the tree's origin and a hash of it in this file's
    successor note before patching.
 3. Re-base the patch set on the real tree: apply 0005 first,
@@ -169,7 +170,10 @@ left untouched.
    never retype a constant. Resolve each center at its
    patch-point line; the schematic context gives way to the
    tree's real context. Build the kernel with the Fubuki
-   config of record (`telezart-kconfig` in the share).
+   config of record (`telezart-kconfig` in the telesart
+   ELBE build directory elbe-build-20261103-204902,
+   SHA-256 9b460f1003db4d417288e9c14caecfa14245dab07186df948fef0f3661e38ceb;
+   the 6.12.107 build config, byte-checked 2026-11-12).
 4. Bind the arena physically: reserve the arena span and
    the channel span at boot so the page allocator never
    hands them out; set the kernel's `-m 512` arena base to

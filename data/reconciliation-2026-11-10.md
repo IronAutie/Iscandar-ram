@@ -511,3 +511,16 @@ measured absence (4d), and the residuals stand out of scope
 by design. Every family the sift or the trace brought
 forward is accounted for in one of those endings; none is
 left unmentioned.
+
+Correction 2026-11-12 (at Andrew's stet): the version skew
+stated in this artifact (item 5 of the recorded gaps, and the
+inputs summary) names a 6.12.113 configuration and kernel.
+The byte-check run on 2026-11-12 established that Fubuki's
+kernel is 6.12.107+deb13-amd64 and its build configuration
+the 6.12.107 config (see the correction note in
+`compiled-subset-2026-11-10.md`). The skew therefore reads:
+6.12.116 evidence read against a 6.12.107 configuration and
+kernel, and the trace was recorded on Fubuki's 6.12.107
+kernel. No family verdict in this artifact depends on the
+patchlevel; the correction is to the label only. The text
+above stands as the record of the run as performed.
