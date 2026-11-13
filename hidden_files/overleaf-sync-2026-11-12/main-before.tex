@@ -1,0 +1,333 @@
+\documentclass[11pt]{article}
+
+\usepackage[a4paper,margin=1in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{hyperref}
+\usepackage{amsmath}
+
+\title{Debian to Iscandar: Full Speed Ahead!\\[0.6em] \large Installing the RAM}
+\author{Andrew Jonathan Fine}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\thispagestyle{empty}
+\newpage
+
+\vspace*{\fill}
+\begin{center}
+To Jennifer: Everything. Always. Forever.
+\end{center}
+\vspace*{\fill}
+
+\newpage
+
+% Composition status and evidence labels are maintained in
+% paper-3-composition.md. No result is stated in this skeleton
+% until its corresponding run has been measured.
+
+\begin{abstract}
+% To be composed after the live experiment has a measured result.
+\end{abstract}
+
+\section*{Statement of the Problem}
+In the prior two papers, [1] and [2], we have devised a deterministic memory allocation and then shown it able to carry a typical boot-time page load on an embedded version of Debian. In this paper we demonstrate the techniques needed to associate the memory allocations with real random-access memory so that our example, Fubuki, can run actual applications at full speed.
+
+\section{Introduction}
+% Status: technique overview inserted at Andrew's direction, 2026-11-08.
+% The build and live-run steps are IN PREPARATION or NOT YET RUN;
+% see paper-3-composition.md for the evidence label of each step.
+
+Our techniques are applied in the following order, upon the source
+code making up Fubuki and upon the built ISO that is the system
+under test:
+
+\begin{enumerate}
+\item \textbf{The sift.} The kernel source tree is searched
+textually for every spelling of the allocator calls, producing a
+census of what can be called.
+\item \textbf{The control trace.} A recorded boot of Fubuki,
+traced from the first instruction available to the tracer, shows
+which of those calls the exercised system actually made.
+\item \textbf{Reconciliation.} The trace is compared against the
+source, and the comparison names the allocator centers: the core
+functions the exercised calls pass through.
+\item \textbf{The compiled subset.} The source census is reduced
+to the subset that Fubuki's own kernel configuration compiles into
+the ISO, each patch point marked compiled in, modular, or absent.
+\item \textbf{The dye.} A distinctive byte pattern is inserted
+into an inlined center and the compiled artifact is scanned for it,
+so the inlined copies that leave no symbol are counted where they
+actually landed.
+\item \textbf{The patch at the centers.} Allocation and free are
+redirected at the centers named above, not at individual call
+sites. The vmalloc address reservation is left stock; its backing
+is the step replaced.
+\item \textbf{The translation layer.} Allocations are associated
+with real random-access memory: the coordinates the allocator
+issues are bound to actual frames, and the inverse binding is run
+on free.
+\item \textbf{The rebuilt ISO.} The image is rebuilt with the
+patched kernel and with a boot service that starts the test
+application without an interactive login.
+\item \textbf{The automatic boot.} The ISO under test is booted
+under QEMU and runs a deterministic page-exercising application at
+full speed, which writes its own ledger of requests and releases.
+\item \textbf{The audit.} The new trace is reconciled against the
+application ledger and against the allocator's own ledger, so that
+every event is accounted for by both sides.
+\end{enumerate}
+
+\section{Prior Results}
+% Status: SETTLED. One paragraph per paper, drafted 2026-11-08 at
+% Andrew's direction, stetted by him 2026-11-11.
+
+In \cite{fine2026iscandar} we constructed a deterministic memory
+allocator by formal bijection: an extensible coordinate system is
+mapped onto a two dimensional memory map, so that allocation is the
+computation of coordinates for a run of exactly the requested size,
+and deallocation is the inverse map. At $k=3$ the map covers a cube
+of 32,768 sectors. The search is bounded by construction, the
+placement is exact fit, and a request that cannot be served is
+refused outright, leaving the decision with the caller. The result
+is an allocator whose behavior on any sequence of requests is fixed
+in advance by the sequence itself.
+
+In \cite{fine2026revisited} we extended the construction from
+$k=3$ to $k=4$, composing up to 32 cubes under a beam of 1,048,576
+sectors, and subjected the extension to a recorded load rather than
+a synthetic one. The complete boot of an embedded Debian system,
+Fubuki, was captured from the kernel's own tracepoints: 812,106
+allocations. Replayed through the $k=4$ allocator at a calibration
+of one sector to one page, the load was carried with no refusals
+and no anomalies, at a peak of 56,023 live objects; against a buddy
+system control replayed on the same trace, the peak memory granted
+differed by a fraction of one percent. The same load was afterwards
+carried in an arena of half the size, again with no refusals. Both
+results, however, were obtained with the allocator standing apart
+from the machine: in the first paper within its own pool, in the
+second over a recording. Its allocations had not yet been
+associated with the real memory of a running system.
+
+\section{The Sift, and its Products}
+% Status: MEASURED (census run 2026-11-07). Andrew's ruling
+% 2026-11-10: the section stands as this five-item outline; the
+% itemize is its settled form, not a placeholder for prose.
+
+\begin{itemize}
+\item It opens with the question the step answers: what can this source ask for, and give back?
+\item Then the method, a textual pass over the tree that takes the spellings as they come, headers and macros included.
+\item Then the findings, which the paper can print as the census itself, with the two facts that give the table its meaning: how skewed the counts are, and how much of the surface is dormant driver mass.
+\item Then the boundary, stated in the section rather than apologized for later: the sift reads text, counts comments, and cannot see inlining, which is exactly why later steps exist.
+\item And it closes with the hand-off: this census is the checklist the control trace will now be audited against.
+\end{itemize}
+
+
+\section{The Census, a Byproduct of Earlier Research}
+% Status: MEASURED. Moved out of the Sift section at Andrew's
+% direction, 2026-11-08. Andrew confirmed 2026-11-10: the
+% section's itemized form is its settled form, and it is in the
+% paper as it stands.
+
+The census is the sift's product in durable form: a counted
+inventory of every occurrence the pass found, spelling by spelling,
+across the 59,969 source and header files of the tree, some ten
+million lines. Where the sift is the act of searching, the census
+is the record the search leaves behind, and it is the census, not
+the search, that the later steps consume: the reconciliation audits
+the trace against it, and the compiled subset is a pruning of it.
+The census began as a byproduct of earlier research, a planning
+count taken during the design work that preceded this paper, and is
+promoted here to evidence.
+\begin{itemize}
+\item Its headline figures are these: 77,577 occurrences in the kmalloc family, and 16,559 more across the wider allocator surface.
+\item The distribution is sharply skewed.
+\item A single free spelling, \texttt{kfree}, accounts for 40,597 occurrences and \texttt{kzalloc} for 21,808, while \texttt{kmem\_cache\_alloc}, the door the recorded boot used most, appears only 329 times in the source.
+\item Static abundance and dynamic importance, the census shows at a glance, are different quantities.
+\end{itemize}
+
+\section{The Control Trace}
+% Status: MEASURED (the Fubuki boot trace). Laid down 2026-11-10
+% at Andrew's direction, in the itemized style of the Sift
+% section, from paper-3-control-trace-DRAFT.md.
+
+\begin{itemize}
+\item It opens with the question the step answers: what did this system actually ask for, and give back, in one complete boot?
+\item Then the method, a recorded boot of Fubuki traced from the first instruction available to the tracer, the kmem family armed from the start, the ledger counted inside the guest.
+\item Then the findings, which the paper can print as the trace ledger itself, with the two facts that give it its meaning: the buffer counters prove the count complete, and the size distribution shows a swarm of small objects, not a storm of large ones.
+\item Then the boundary, stated in the section rather than apologized for later: the trace reads the kmem family only, and cannot see the vmalloc or page families, which is exactly why later steps exist.
+\item And it closes with the hand-off: this ledger is the control the reconciliation will now audit against the census.
+\end{itemize}
+
+\section{The Reconciliation}
+% Status: RUN and reported. The reconciliation was run as a
+% formal step on 2026-11-10 (data/reconciliation-2026-11-10.md).
+% This updated form, replacing the prediction the section
+% carried from 2026-11-10, was shown to Andrew and stetted by
+% him 2026-11-11. The gaps item's watch point line was
+% corrected the same day under his stet, once his bypass
+% ruling answered it.
+
+\begin{itemize}
+\item It opens with the question the step answers: of everything the source can do, what did the recorded boot actually do, and through which centers did it do it? The step was run as a formal comparison on 2026-11-10, and this section reports what it found.
+\item Then the method, a comparison of the ledgers: every family of events in the control trace is matched back to its sifted sites in the census, the calls from those sites followed down to the funnels they pass through, and each family's center checked against the compiled subset and, where it exists, the dye. Four instruments, read against each other under the paper's rulings; no new measurement was taken for this step.
+\item Then the dispositions, which are the step's product. Of the twelve family rows the comparison carries, nine end redirected at a named center: the kmalloc spellings, the named caches crossing as requests, the free doors, krealloc by composition, oversize kmalloc at its own center with no exemption, vmalloc with its reservation half stock by design, mempool through its backings, percpu, and gen\_pool. One row ends substrate, the page-direct family, the build's principal declared exception, with DMA-coherent allocations served through it. One ends moot by measured absence, CMA, which Fubuki's build does not contain. The residuals, memblock and vmap and ioremap, stand out of scope by design, and the early-boot prefix stands stock and logged across all families. Every family the sift or the trace brought forward is accounted for in one of those endings; none is left unmentioned.
+\item Then the fact that gives the comparison its shape: static mass and dynamic mass stand inverted. \texttt{kmem\_cache\_alloc}, spelled 329 times in the source, produced 706,419 events in the boot; \texttt{kfree}, spelled 40,597 times, carried 166,390 of the boot's frees against 671,928 through \texttt{kmem\_cache\_free}. The reconciliation follows the trace for load and the sift for coverage.
+\item Then the check the step ran on its own inputs: 812,106 allocations, less 754,350 matched frees, less 56,020 objects live at the end, equals 1,736, exactly the trace's replaced-pointer figure; and the trace's size histogram sums to its own total without remainder. The ledgers agree with themselves before they are asked to agree with each other.
+\item Then the gaps, recorded rather than papered over: the dye's eight compiled expansions against the sift's six source call sites, accounted exactly, the instruments measuring different quantities; the families no runtime count reaches, vmalloc, page-direct, oversize as a split, percpu, gen\_pool, and the cross-center doors, whose rows rest on the source-side instruments alone; the absent figures, no sift count for krealloc or the gen\_pool spellings, no split of named caches from size caches inside the 706,419, no stated value of \texttt{KMALLOC\_MAX\_CACHE\_SIZE} for this build; the version skew, 6.12.116 evidence read against a 6.12.113 configuration and kernel; gen\_pool's served set, in scope and unnamed by any input; and the watch point, \texttt{alloc\_slab\_page}, settled by no input and answered by ruling once the question was put plainly: bypass outright, SLUB keeping no bookkeeping over Iscandar grants.
+\item And it closes with the hand-off: the centers this comparison certifies are the patch points, and the compiled subset says which of them Fubuki's own kernel actually builds.
+\end{itemize}
+
+\section{The Compiled Subset}
+% Status: MEASURED 2026-11-10. The enumeration artifact stands
+% in data/ (compiled-subset-2026-11-10.md). Laid down 2026-11-10
+% at Andrew's direction, in the itemized style of the Sift
+% section, after being shown to him in draft.
+
+\begin{itemize}
+\item It opens with the question the step answers: of the centers the reconciliation certifies in the source, which ones does Fubuki's own kernel actually build?
+\item Then the method, a reading of two artifacts against each other: every patch point is mapped to the object file that compiles it and the configuration symbol that gates that object, from the kernel's own Makefiles, and the symbols are then read from Fubuki's configuration, each point marked compiled in, modular, or absent.
+\item Then the findings, which the paper can print as the enumeration itself, with the fact that gives it its meaning: every first-ring center is compiled in, and nothing in the set is modular, so the subset Fubuki builds is the patch list entire, less one point. \texttt{cma\_alloc} is absent, its symbol unset in her configuration, and her DMA path runs through the direct allocator instead.
+\item Then the boundary, stated in the section rather than apologized for later: the gating evidence is read from the 6.12.116 tree while the configuration is 6.12.113, and the configuration is the stock package's, not yet checked byte for byte against the build's own exported copy. The enumeration also works at the granularity of object files, so the one inlined center's presence in the artifact is the next step's question, not this one's.
+\item And it closes with the hand-off: this pruned list is what the dye will now audit in the compiled artifact, and it is the exact set of centers the patch will touch.
+\end{itemize}
+
+\section{Patch Points}
+% Status: the full list stands in paper-3-patch-points-DRAFT.md,
+% every function verified by grep against Linux 6.12.116 with
+% file and line, and pruned by the compiled subset (section 7).
+% Laid down 2026-11-10 at Andrew's direction, in the itemized
+% style of the Sift section, after being shown to him in draft.
+% Method provenance, at his correction the same day: the method
+% was arrived at as a thought experiment.
+
+\begin{itemize}
+\item It opens with the question the step answers: at which exact centers, named function by function, will the running kernel be redirected, so that every allocation spelling is served without patching a single call site?
+\item Then the method, arrived at as a thought experiment: the recorded trace is all we need as the control; compare it against the source and patch there, at the allocator centers the spellings funnel into.
+\item Then the findings, which the paper can print as the list itself, in its families: the slab core, six points around the one funnel, \texttt{slab\_alloc\_node}, with the oversize door named separately because it never touches the funnel; the vmalloc center, where the address reservation stays stock and only the page-by-page backing is replaced; the page allocator, held in the second ring; the side centers that follow their backing; and the doors that need no patch of their own because both their centers are patched. The list also carries the naming fact of this kernel: nearly every allocation door is a \texttt{\_noprof} symbol behind \texttt{alloc\_hooks()}, while the free doors keep their plain names.
+\item Then the boundary, stated in the section rather than apologized for later: the list is verified against 6.12.116 while Fubuki's kernel is 6.12.113; the vmalloc and page families rest on the sift alone until a second trace arms them; memblock and the address-space-only mappings are named as out of scope, so the completeness claim can state its own edge; and three design rulings remain open and are recorded as open: the page allocator as substrate or bypassed, the oversize kmalloc door patched separately or left page-backed, and how cache geometries are represented at the funnel.
+\item And it closes with the hand-off: one point on this list is an inlined helper that leaves no symbol in the compiled kernel, and the dye test, which follows, is the audit that finds its copies in the artifact.
+\end{itemize}
+
+\section{The Dye Test}
+% Status: MEASURED 2026-11-08 on Linux 6.12.116, mm/slub.o;
+% the artifact stands in data/ (dye-test-2026-11-08.md). The
+% experiment is the author's, proposed from his experience
+% debugging embedded systems. Laid down 2026-11-10 at Andrew's
+% direction, in the itemized style of the Sift section, after
+% the gates formulation was discussed and approved in chat.
+
+\begin{itemize}
+\item It opens with the question the step answers: can a gate be missing between the source and the executable? A gate is a function every request of some family must pass through, and this kernel carries whole pieces of its allocator as code in header files: the kmalloc dispatch is inline logic in a header, and the funnel itself, \texttt{slab\_alloc\_node}, is a static inline helper. Such code leaves no symbol in the compiled artifact, so a symbol audit can neither confirm the gate was compiled nor count the copies the compiler made of it.
+\item Then the method, an experiment proposed by the author from experience debugging embedded systems: a distinctive byte pattern, the dye, is planted in the gate's body in the source, emitted so the optimizer cannot delete it, a second pattern is planted as a control in an ordinary non-inlined function, the object is compiled, and the artifact is scanned for both patterns. A gate can be missing outright, the pattern nowhere, or missing in part, fewer copies than the source predicts, which would mean a path that reaches allocation without passing the gate.
+\item Then the findings, which locate anything missing down to the least particular, one expansion of one gate: the gate's dye appears 8 times in the object, all in \texttt{.text}, each copy inside a named exported wrapper, against 6 call sites in the source. The excess is accounted for exactly: five sites sit directly in exported wrappers, and the sixth sits inside an inline helper that was itself expanded into three wrappers, so 5 + 3 = 8. The control dye appears exactly once, and a baseline object built from an unmodified file contains neither pattern.
+\item Then the boundary, stated in the section rather than apologized for later: the run covers one object file of a defconfig build and boots nothing; its conditions, SLUB built in with SLUB\_TINY unset, are the conditions the compiled subset found in Fubuki's own configuration, so the reading transfers to her build class; and the audit is of the one inlined gate, the remaining centers being named symbols that a symbol audit reaches directly.
+\item And it closes with the hand-off: the compiled-artifact leg of the completeness evidence is in hand. The sift reads the source, the trace reads the running system, and the dye reads the artifact, and the three agree on the centers. What remains is the run itself, and the sections turn to it.
+\end{itemize}
+
+\section{Automatic Boot and the Page Exerciser}
+% Status: DESIGNED, NOT YET EXECUTED; resolved as stet by
+% Andrew 2026-11-11. The step's design is recorded in the
+% composition ledger. The exerciser's pattern was finished
+% 2026-11-11 (paper-3-exerciser-pattern.md: scale factor 16,
+% the two largest classes as anchors) and implemented as a
+% boot-up application (exerciser/ in this repo). Its exact
+% counts enter the paper later, as part of the prediction
+% sheet itself. Laid down 2026-11-10 at Andrew's direction,
+% in the itemized style of the Sift section.
+
+\begin{itemize}
+\item It opens with the question the step answers: how do you run the patched system so that the evidence is complete, repeatable, and untouched by human timing, and so that part of the load is known exactly in advance?
+\item Then the arrangement: the patched Fubuki boots unattended under QEMU at 512 MB, with the page tracepoints armed from t=0; a boot service runs the exerciser; and the finish step exports the trace and the exerciser's ledger and shuts the guest down. Two workloads share the boot: the system's own startup, uncontrolled, and the exerciser, controlled to the last allocation.
+\item Then the exerciser itself: a fixed program of page allocations in classes from 1 to 128 pages, arranged in phases, a build-up, a partial release that leaves anchors standing, churn cycles that re-allocate exactly what was released, and a final drain to zero. It writes its own ledger as it runs. It opens with a console menu under a 10-second timeout whose default is the standard run, the extended run with more churn standing as the second option, because the evidence boot is unattended and the menu exists for the rehearsals.
+\item Then the discipline that gives the step its force: because the program is fixed, a prediction sheet is computed from the program alone before any run, counts, sizes, peak, and end state, and the audit will print predicted against actual. The prediction is never edited after a run; a mismatch is a finding.
+\item Then the boundary, stated in the section rather than apologized for later: this step is designed, not yet executed; first rehearsals run in a stand-in guest, and the evidence run uses the ELBE-built Fubuki image, preserving its lineage; and the exerciser's page-level requests are served through the page allocator, which stands underneath as substrate by ruling, and its results are read in that light.
+\item And it closes with the hand-off: the boot produces the trace and the ledger; the audit, the paper's last step, is where they are read against the prediction and against the control.
+\end{itemize}
+
+\section{Live Interposition}
+% Status: NOT YET BUILT. This section is design only, written
+% 2026-11-10 at Andrew's direction after discussion; the build
+% itself is deferred by his decision of the same day, gated on
+% his design rulings and the reconciliation run. Standing
+% discipline from the composition ledger: no sentence in the
+% paper describes any part of this step as working until the
+% corresponding run has been measured.
+
+\begin{itemize}
+\item It opens with the question the step answers: can Iscandar serve a running kernel's requests as they occur, in real time, in place of the allocators the kernel was built with? The earlier papers replayed a recorded trace offline; this step is the live form of the same claim, the allocator interposed between the kernel's callers and the kernel's memory.
+\item Then the arrangement, three parts: the patch at the selected centers of section 8; the bridge from the patched system to the Iscandar arena; and the translation layer, which the design places in user space, between the two.
+\item Then the translation discipline, the step's spine: Iscandar grants coordinates, not addresses, and the kernel cannot dereference a coordinate, so every grant crosses the bridge twice in its life, forward at allocation, when the coordinate becomes an actual pointer the caller can use, and backward at the free door, when the pointer is translated back and the bijection runs in reverse to return the run.
+\item Then the two problems the design records inside this step: the named caches, which carry object size, alignment, and sometimes a constructor, so the design must state how a cache is represented on the Iscandar side before the funnel can serve it; and early boot, since the kernel allocates from its first breath and interposition cannot serve before the arena stands, so either the arena is raised before the first redirected call, or the earliest calls pass through stock and are logged as such. Both stand open at this writing, awaiting the author's rulings.
+\item Then the failure semantics: Iscandar refuses the request and the caller decides; it does not get lost, throw, or terminate abnormally. A kernel allocation site already knows how to hear a refusal, a null return being an ordinary event under memory pressure, so the patch maps the refusal onto the kernel's own failure semantics, and no other outcome crosses the bridge.
+\item Then the boundary, stated in the section rather than apologized for later: none of this is built yet. The section is a design, and the paper claims for it only that the centers are named, the discipline is stated, and the open problems are recorded as open.
+\item And it closes with the hand-off: when this step is built and the boot of section 10 runs on the patched kernel, the measurements that follow are the paper's evidence, and the audit reads them against the prediction and the control.
+\end{itemize}
+
+\section{Accommodations for Operating System as an Application}
+% Status: written 2026-11-10 at Andrew's direction, recording the
+% concessions the PC rig makes in simulating the real system's
+% ROM and SRAM, so the claims can be read at their true width.
+% Retitled and extended 2026-11-11 at Andrew's direction: the
+% extent ledger, the relocated areas, and the compile-time map
+% fixtures, from the design session of that day.
+
+\begin{itemize}
+\item It opens by naming the situation plainly: the live arrangement of the preceding section runs on a PC, and two of its components are simulations of hardware a real system would carry as parts: read-only memory holding the oracle tables, and static memory holding the arena. The concessions are recorded here so that no reader mistakes the rig for the machine.
+\item Then the tables. In a real system the oracle tables reside in ROM or in flash, written once and read forever, as they began in the author's 80188 design, where the tables were ROMs. On the PC they are files mapped read-only by mmap, and the serving code has no write path to them, a rule enforced by the mapping itself, as the ROM enforces it in hardware.
+\item Then the arena. In a real system the arena is a static memory chip mapped at a fixed address, and an Iscandar coordinate is an offset into that chip; the mapping never moves. On the PC the arena is raised by mmap and is backed by ordinary pages granted by the page allocator, whose involvement ends at that raise: every grant, placement, and refusal inside the arena is Iscandar's alone.
+\item Then the substrate, and the boundary of what was replaced. In the rig the stock page allocator supplies the arena's pages, standing in for the bulk memory a real system presents as a device; it hands the arena over and withdraws, and it parcels nothing for any caller. Its further duties, reclaim, watermarks, and the feeding of the page cache and of user processes, are a PC operating system's virtual-memory duties, not an allocator's charter, and they were never among the things this paper replaces. What the paper replaces is every allocator the kernel names; the substrate is named here so that replacement is not misread as wider, or narrower, than it is.
+\item Then what Iscandar is not, stated against its own home ground. An RTOS, the class of system Iscandar was first built for, is not required to provide virtual memory at all: no per-process address spaces, no demand paging, no page cache, no reclaim, and those absences are no defect in it, because its contract never promised them. Iscandar is not a virtual memory replacement and does not attempt one: it translates no addresses and administers no address spaces. Where a virtual memory system exists, as in the kernel under test, it stays, stock and untouched; where none exists, none is missed. Iscandar's whole charter is allocation, the deterministic and exact parcelling of a store of memory, with a refusal when the store cannot serve. Nothing in this paper should be read as claiming more for it than that charter, or less.
+\item Then the accommodations the operating system itself exacts, beginning with the length a real pointer destroys. A CPUPointer carries its base and its length in the one word; a real pointer, which is what the kernel's callers hold, carries its base in its offset and the length nowhere. So the arrangement keeps an extent ledger: one bin per page of each cube, and at grant time the length of the grant that starts at that page is stuffed into its bin. Deallocation runs the address math in reverse, cube and start page recovered by division, reads the length back out of the bin, and so completes the CPUPointer the engine's free path requires. The shadows of live grants never collide, because a granted page is never issued again, and so every bin has at most one live writer, by construction. The ledger is no part of Iscandar: in the allocator's original RTOS applications the word circulates whole in the caller's hands, the covenant intact, and no ledger exists or is needed. It is part of the price of supporting a full operating system, charged to this paper's setting and to nothing else.
+\item Then the cache registry, seated with the ledger among the fixtures. A named cache crosses the bridge as a request, size and alignment only, and its bookkeeping lives in the translation layer; the registry is that bookkeeping's record, one entry for each cache the kernel creates. It is data about the served world, not part of the serving machinery, so it does not sit with the layer's own working memory, which stands reserved outside the arena: it is seated inside the governed memory at the raise, among the fixtures, under a hard cap. The compiled subset fixes how many caches Fubuki's configuration can create, and the registry is sized to that count when the build is drawn. A creation that would pass the cap is refused, and the refusal is a finding, not a fallback.
+\item Then the standing of these accommodations, stated once. None of them is an invention of this paper. The relocation of overhead into the memory the allocator governs belongs to the original design: on the 80188 the tables were placed at the beginning of the SRAM and marked by hand, inside the very store they served. What this paper adds is reach, not concept. The concept is expanded here to cover an operating system as an application of the allocator, the kernel standing in the posture of the original applications, differing only in that its callers hold real pointers where the original callers held the word itself, and so pay, in the ledger, the one price that difference exacts.
+\item Then where that price is paid: inside the store itself, in the manner of the author's 80188 design, where the arena tables were relocated into the beginning of the SRAM and their sectors and counts marked manually. Each cube carries one relocated area at its head, standing at the cube's base address in the simulated SRAM, which is the SRAM base plus the cube's number times a cube's span, the correspondence being arithmetic throughout. The area is pre-allocated at the raise, before serving begins, and its sectors and counts are marked by hand, so the cube's books open already balanced. It holds the cube's slice of the extent ledger, sixteen pages, and the cube's maps and counters, three pages: nineteen pages of the cube's 32,768, 76 pages of the arena's 131,072, so the served capacity stands net at 130,996 pages. One area per cube, and nothing of a cube's fixture in another cube's space, so that a severe failure in a cube is diagnosed from that cube's one area, in a single reading.
+\item Then the fixtures of the machine. The translation layer's own working memory, which cannot be taken from the doors it serves without closing a circle, and the bridge channel between the patched kernel and the layer, which lives in neither side's allocation, are not found at runtime and not negotiated at boot. Both stand reserved in Fubuki's compile-time memory map, at the addresses the build states, so that a mismatch between the patch and the map fails the build rather than the boot. The arrangement is thereby specific to this build and its map; the specificity is recorded here, with the reserved sizes, as one of the accommodations, and porting the arrangement to another kernel means drawing that kernel's map the same way.
+\item Then what the concessions preserve: a fixed mapping, read-only tables, uniform lookup, exact-fit grants, and the refusal semantics. These are the properties on which the paper's claims about correctness and freedom from panic rest, and the simulation preserves each of them.
+\item Then what they do not preserve: timing. Pages of DRAM behind a mapping do not behave as static memory behaves, and no figure in the Measurements is an SRAM figure. Speed is reported there as record, and bears on the verdict only by contributing to a panic, as the Discussion fixes.
+\item And it closes with the width of the claim, stated once: the paper's conclusions concern allocation behavior, which the simulation preserves entire. It draws no conclusion about hardware timing, which the simulation does not preserve at all.
+\end{itemize}
+
+\section{Measurements}
+% Status: quantities to be fixed before the live run.
+
+\section{Discussion}
+% Status: criterion fixed in advance (2026-11-10); verdict left blank until the live run is measured.
+
+\begin{itemize}
+\item It opens by fixing the criterion in advance, before any run exists to be judged: the main criterion is whether this is a direct replacement, and whether it runs without a panic.
+\item Then it defines direct replacement strictly: same kernel, same configuration, same boot, same workload, the allocators exchanged at the centers and nothing else altered to make the exchange survivable. Any exemption, if one is forced on us, is named, and the claim shrinks to fit it.
+\item Then it fixes what the replacement is: the C transcription of the engine, not the Python model. The Python code serves only to generate the oracle outputs against which the C is admitted; no Python runs in the serving arrangement. A run served by the Python model would therefore not meet the direct replacement criterion, whatever its other results.
+\item Then the second half: the patched system boots unattended, reaches the finish step, the exerciser completes, the evidence exports, and the guest shuts down clean, no panic, no oops, no invariant violation. A panic ends the claim for that run outright; it is not averaged into anything.
+\item Then the subordinate quantities, placed where they belong: speed and paging coverage are reported in the Measurements and discussed here only as record, and either can affect the verdict only by contributing to a panic. The paper does not grade the run on them.
+\item Then what a pass would mean, stated modestly in advance: the claim of the first two papers, support by replay, would become support in place, for this kernel, this configuration, and this workload, and no wider.
+\item And it closes with the verdict left blank, deliberately: this section will be completed from the run's record, and not before.
+\end{itemize}
+
+\section{Conclusion}
+% Status: NOT YET RUN. To be written after the live measurements.
+
+\section*{Acknowledgements}
+% Paper 3 acknowledgement text has not been dictated.
+
+\begin{thebibliography}{9}
+
+\bibitem{fine2026iscandar}
+Andrew Jonathan Fine.
+\newblock An Extension of Buddy Systems to Arbitrary Radix for
+Deterministic Memory Allocation.
+\newblock Zenodo, 2026.
+\newblock DOI: 10.5281/zenodo.23748412.
+
+\bibitem{fine2026revisited}
+Andrew Jonathan Fine.
+\newblock Iscandar Revisited: Expansion to k=4 Theory For Running Debian.
+\newblock Zenodo, 2026.
+\newblock DOI: 10.5281/zenodo.24044354.
+
+\end{thebibliography}
+
+\end{document}
