@@ -96,3 +96,8 @@ as read, pending the full gating-symbol re-reading against
 the 6.12.107 config, which is the open follow-up; the method
 section above is unchanged as the record of how the
 enumeration was actually performed.
+The re-reading closed the same day, 2026-11-12: all eight
+gating symbols named in this artifact (CMA, GENERIC_ALLOCATOR,
+HAS_DMA, MMU, NUMA, SLUB, SLUB_TINY, SMP) were read from the
+build's own 6.12.107 config on telesart, and every value
+agrees with the value the enumeration was based on.
