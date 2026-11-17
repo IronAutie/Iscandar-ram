@@ -16,6 +16,15 @@ same day (project 6af5061f18a2c07e6eff5e68).
 - In `build/`, run `./link-check.sh`. Eleven of eleven PASS
   is the gate; anything less stops the day here.
 
+DONE 2026-11-17: eleven of eleven PASS on telesart. Two
+bench notes from the run: (1) telesart's engine checkout is
+`~/iscandar`, so the check runs as
+`ENGINE_REPO=$HOME/iscandar ./link-check.sh` (the Makefile
+default names this VM's layout). (2) On a fresh clone the
+first run fails conf-idempotent because
+`constants/iscandar-build.conf` is generated and gitignored;
+that first run generates it, and the immediate re-run passes.
+
 ## Task 3. Prepare the Linux 6.12.116 tree
 
 Artifact of record (kernel.org, released 2026-11-06):
@@ -36,7 +45,9 @@ tree the sift, reconciliation, and dye were read against.
 
 Apply 0005 first, then 0001 to 0004. Copy
 `build/bridge/iscandar_bridge.h` into the tree as
-`include/linux/iscandar.h` verbatim; never retype a constant.
+`include/iscandar_bridge.h` verbatim; never retype a constant.
+(`include/linux/iscandar.h` is the glue header 0005 creates;
+the shared header does not sit there. Ruled 2026-11-17.)
 Resolve each center at its patch-point line against the real
 tree. The percpu chunk question and the vfree_atomic question
 are answered here, by the tree.
@@ -48,6 +59,13 @@ With the Fubuki config of record: `telezart-kconfig` in
 SHA-256
 9b460f1003db4d417288e9c14caecfa14245dab07186df948fef0f3661e38ceb
 (the 6.12.107 build config, byte-checked 2026-11-12).
+One ruled derivative (2026-11-17): the build is
+uniprocessor. Disable SMP on this config
+(`scripts/config --disable SMP`): center 4.2 is served
+under the build's uniprocessor precondition, and the
+paper states that scope. The config of record remains
+the byte-checked file above; the derivative is this
+one switch.
 
 ## Task 6. Bind the arena and the channel
 

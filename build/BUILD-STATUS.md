@@ -166,8 +166,10 @@ left untouched.
    successor note before patching.
 3. Re-base the patch set on the real tree: apply 0005 first,
    then 0001 to 0004. Copy `build/bridge/iscandar_bridge.h`
-   into the tree as `include/linux/iscandar.h` verbatim;
-   never retype a constant. Resolve each center at its
+   into the tree as `include/iscandar_bridge.h` verbatim;
+   never retype a constant (`include/linux/iscandar.h` is
+   the glue header 0005 creates; ruled 2026-11-17). Resolve
+   each center at its
    patch-point line; the schematic context gives way to the
    tree's real context. Build the kernel with the Fubuki
    config of record (`telezart-kconfig` in the telesart

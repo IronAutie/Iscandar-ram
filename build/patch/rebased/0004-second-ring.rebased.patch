@@ -1,0 +1,112 @@
+--- a/mm/percpu.c
++++ b/mm/percpu.c
+@@ -1743,6 +1743,44 @@
+ void __percpu *pcpu_alloc_noprof(size_t size, size_t align, bool reserved,
+ 				 gfp_t gfp)
+ {
++	if (iscandar_active() && !reserved) {
++		struct IscandarBridgeRecord rec = { };
++		void *p;
++
++		/* Center 4.2 is served under the build's
++		 * uniprocessor precondition: Iscandar is an
++		 * embedded, single-CPU allocator, and on a UP
++		 * build the percpu translations are the identity
++		 * (see the UP definitions at the head of this
++		 * file), so the arena address below is the
++		 * token, whole and exact. The staged size line
++		 * multiplies by num_possible_cpus(), which the
++		 * precondition fixes at 1. The checks mirror
++		 * the stock rejection set below, which this
++		 * door sits above; an atomic-context caller is
++		 * refused, because the bridge call sleeps, and
++		 * NULL is the shape such a caller already
++		 * handles. The run is zeroed here, as the
++		 * chunk layer's population would have done.
++		 * Ruled 2026-11-17; the scope is stated in
++		 * the paper. */
++		if (unlikely(!size || size > PCPU_MIN_UNIT_SIZE
++			     || align > PAGE_SIZE
++			     || !is_power_of_2(align)))
++			return NULL;
++		if (!gfpflags_allow_blocking(gfp))
++			return NULL;
++		rec.op = ISCANDAR_OP_PERCPU_ALLOC;
++		rec.size = (u64)size * num_possible_cpus();
++		rec.align = (u32)align;
++		if (iscandar_bridge_call(&rec)
++		    || rec.status != ISCANDAR_BRIDGE_OK)
++			return NULL;
++		p = iscandar_offset_to_ptr(rec.result);
++		memset(p, 0, size);
++		return (void __percpu *)p;
++	}
++	iscandar_prefix_note(ISCANDAR_CENTER_PERCPU, size);
+ 	gfp_t pcpu_gfp;
+ 	bool is_atomic;
+ 	bool do_warn;
+@@ -2244,6 +2282,26 @@
+ 
+ 	kmemleak_free_percpu(ptr);
+ 
++	/* Iscandar bridge, center 4.2's free door. The
++	 * header names ISCANDAR_OP_PERCPU_FREE the 4.2
++	 * free door and the layer implements it, but the
++	 * staged set carried no hunk sending it; this
++	 * hunk was added with the uniprocessor ruling,
++	 * 2026-11-17. On a UP build the token is the
++	 * arena address itself, so the range test is
++	 * exact. The chunk search below has no chunk for
++	 * a bridge-born token and must never see one.
++	 * The offset travels in rec.size, as at every
++	 * free door. */
++	if (iscandar_ptr_in_arena(ptr)) {
++		struct IscandarBridgeRecord rec = { };
++
++		rec.op = ISCANDAR_OP_PERCPU_FREE;
++		rec.size = iscandar_ptr_to_offset(ptr);
++		(void)iscandar_bridge_call(&rec);
++		return;
++	}
++
+ 	addr = __pcpu_ptr_to_addr(ptr);
+ 	chunk = pcpu_chunk_addr_search(addr);
+ 	off = addr - chunk->base_addr;
+--- a/lib/genalloc.c
++++ b/lib/genalloc.c
+@@ -277,6 +277,19 @@
+ unsigned long gen_pool_alloc_algo_owner(struct gen_pool *pool, size_t size,
+ 		genpool_algo_t algo, void *data, void **owner)
+ {
++	if (iscandar_active() && iscandar_gen_pool_is_arena(pool)) {
++		struct IscandarBridgeRecord rec = { };
++
++		rec.op = ISCANDAR_OP_GENPOOL_ALLOC;
++		rec.size = size;
++		if (iscandar_bridge_call(&rec)
++		    || rec.status != ISCANDAR_BRIDGE_OK)
++			return 0;
++		return (unsigned long)
++			iscandar_offset_to_ptr(rec.result);
++	}
++	if (iscandar_active())
++		iscandar_prefix_note(ISCANDAR_CENTER_GENPOOL, size);
+ 	struct gen_pool_chunk *chunk;
+ 	unsigned long addr = 0;
+ 	int order = pool->min_alloc_order;
+@@ -487,6 +500,15 @@
+ void gen_pool_free_owner(struct gen_pool *pool, unsigned long addr, size_t size,
+ 		void **owner)
+ {
++	if (iscandar_gen_pool_is_arena(pool)
++	    && iscandar_ptr_in_arena((const void *)addr)) {
++		struct IscandarBridgeRecord rec = { };
++
++		rec.op = ISCANDAR_OP_GENPOOL_FREE;
++		rec.size = iscandar_ptr_to_offset((const void *)addr);
++		(void)iscandar_bridge_call(&rec);
++		return;
++	}
+ 	struct gen_pool_chunk *chunk;
+ 	int order = pool->min_alloc_order;
+ 	unsigned long start_bit, nbits, remain;

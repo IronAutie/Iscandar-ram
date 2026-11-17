@@ -34,7 +34,7 @@ the prefix.
 
 --- /dev/null
 +++ b/include/linux/iscandar.h
-@@ -0,0 +1,40 @@
+@@ -0,0 +1,42 @@
 +/* SPDX-License-Identifier: GPL-2.0 */
 +/* iscandar.h -- the kernel-internal bridge API. The shared
 + * definitions (constants, records, the control block) live
@@ -72,6 +72,8 @@ the prefix.
 +struct page *iscandar_offset_to_page(u64 offset);
 +bool iscandar_ptr_in_arena(const void *p);
 +u64 iscandar_ptr_to_offset(const void *p);
++bool iscandar_page_in_arena(struct page *page);
++u64 iscandar_page_to_offset(struct page *page);
 +
 +/* gen_pool served set: a pool is arena-served only if the
 + * build registered it (the reconciliation records the set
@@ -84,7 +86,7 @@ the prefix.
 +#endif
 --- /dev/null
 +++ b/mm/iscandar_bridge.c
-@@ -0,0 +1,190 @@
+@@ -0,0 +1,201 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/* iscandar_bridge.c -- the kernel side of the Paper 3
 + * bridge. Scaffolding at the author's direction; the
@@ -153,6 +155,18 @@ the prefix.
 +u64 iscandar_ptr_to_offset(const void *p)
 +{
 +	return (u64)((const char *)p - (const char *)iscandar_arena_base);
++}
++
++bool iscandar_page_in_arena(struct page *page)
++{
++	return page_to_phys(page) >= iscandar_arena_phys
++	    && page_to_phys(page) < iscandar_arena_phys
++				    + ISCANDAR_ARENA_BYTES;
++}
++
++u64 iscandar_page_to_offset(struct page *page)
++{
++	return page_to_phys(page) - iscandar_arena_phys;
 +}
 +
 +void iscandar_prefix_note(unsigned int center, size_t size)

@@ -1,0 +1,82 @@
+--- a/mm/vmalloc.c
++++ b/mm/vmalloc.c
+@@ -3372,6 +3372,12 @@
+  */
+ void vfree_atomic(const void *addr)
+ {
++	/* Same door as vfree: the bridge free path does not
++	 * sleep in this build's serving arrangement (the call
++	 * completes synchronously), so the atomic door takes
++	 * the same range decision and the same record. If the
++	 * bench build makes the call blocking, this door is
++	 * where that finding lands; it is not pre-decided. */
+ 	struct vfree_deferred *p = raw_cpu_ptr(&vfree_deferred);
+ 
+ 	BUG_ON(in_nmi());
+@@ -3421,6 +3427,35 @@
+ 	if (!addr)
+ 		return;
+ 
++	/* Iscandar bridge, center 2.4's free door. The staged
++	 * text tested the address itself against the arena's
++	 * kernel mapping, but an address vfree() receives is
++	 * a vmalloc-range address with the arena's pages
++	 * mapped in, never an address inside that mapping,
++	 * so the staged test could not fire and the stock
++	 * body below would have freed the arena's pages to
++	 * the buddy allocator. Test the backing instead:
++	 * the area's first page, against the arena's
++	 * physical range. The door sits below the
++	 * in_interrupt() delegation above, because
++	 * iscandar_bridge_call() sleeps; a deferred atomic
++	 * free reaches this door again in process context.
++	 * Ruled 2026-11-17. */
++	{
++		struct vm_struct *area = find_vm_area(addr);
++
++		if (area && area->nr_pages > 0 && area->pages
++		    && iscandar_page_in_arena(area->pages[0])) {
++			struct IscandarBridgeRecord rec = { };
++
++			rec.op = ISCANDAR_OP_VFREE;
++			rec.size =
++				iscandar_page_to_offset(area->pages[0]);
++			(void)iscandar_bridge_call(&rec);
++			return;
++		}
++	}
++
+ 	vm = remove_vm_area(addr);
+ 	if (unlikely(!vm)) {
+ 		WARN(1, KERN_ERR "Trying to vfree() nonexistent vm area (%p)\n",
+@@ -3594,6 +3629,30 @@
+ vm_area_alloc_pages(gfp_t gfp, int nid,
+ 		unsigned int order, unsigned int nr_pages, struct page **pages)
+ {
++	if (iscandar_active()) {
++		struct IscandarBridgeRecord rec = { };
++		unsigned int i;
++
++		rec.op = ISCANDAR_OP_VMALLOC_BACKING;
++		rec.size = (u64)nr_pages << PAGE_SHIFT;
++		/* This function returns a page count, not an
++		 * error code: 0 is its nothing-allocated shape
++		 * (the staged text's -ENOMEM would read as some
++		 * four billion pages), and nr_pages below is
++		 * its complete one (the staged 0 would read as
++		 * failure). Ruled 2026-11-17: the function's
++		 * own shapes, this comment recording the
++		 * staged text. */
++		if (iscandar_bridge_call(&rec)
++		    || rec.status != ISCANDAR_BRIDGE_OK)
++			return 0;
++		for (i = 0; i < nr_pages; i++)
++			pages[i] =
++				iscandar_offset_to_page(rec.result) + i;
++		return nr_pages;
++	}
++	iscandar_prefix_note(ISCANDAR_CENTER_VMALLOC_BACKING,
++			     (size_t)nr_pages << PAGE_SHIFT);
+ 	unsigned int nr_allocated = 0;
+ 	struct page *page;
+ 	int i;

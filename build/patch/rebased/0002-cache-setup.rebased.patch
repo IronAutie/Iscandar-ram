@@ -1,0 +1,32 @@
+--- a/mm/slab_common.c
++++ b/mm/slab_common.c
+@@ -376,6 +376,20 @@
+ 		}
+ 		return NULL;
+ 	}
++	/* At the successful return, with s the new cache. A
++	 * refused registration fails the creation with NULL,
++	 * this function's own failure shape (its kernel-doc
++	 * and its error tail agree); the staged text's
++	 * ERR_PTR(-ENOSPC) would be handed on by callers as
++	 * if it were a cache. Ruled 2026-11-17: the
++	 * function's own shape, this comment recording the
++	 * staged text. */
++	if (iscandar_active()
++	    && iscandar_cache_register(s, object_size,
++				       args->align, flags))
++		return NULL;
++	iscandar_prefix_note(ISCANDAR_CENTER_CACHE_SETUP,
++			     object_size);
+ 	return s;
+ }
+ EXPORT_SYMBOL(__kmem_cache_create_args);
+@@ -505,6 +519,8 @@
+ 
+ void kmem_cache_destroy(struct kmem_cache *s)
+ {
++	if (iscandar_active())
++		iscandar_cache_unregister(s);
+ 	int err;
+ 
+ 	if (unlikely(!s) || !kasan_check_byte(s))

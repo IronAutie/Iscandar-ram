@@ -1,0 +1,122 @@
+--- a/mm/slub.c
++++ b/mm/slub.c
+@@ -2470,6 +2470,11 @@
+ static inline struct slab *alloc_slab_page(gfp_t flags, int node,
+ 		struct kmem_cache_order_objects oo)
+ {
++	/* Watch point, instrumented only. Under the bypass
++	 * ruling this counter must not move for a redirected
++	 * cache after the early-boot prefix; the evidence run
++	 * reads it from /proc/iscandar_bridge. */
++	atomic64_inc(&iscandar_slab_page_calls);
+ 	struct folio *folio;
+ 	struct slab *slab;
+ 	unsigned int order = oo_order(oo);
+@@ -4205,6 +4210,30 @@
+ static __fastpath_inline void *slab_alloc_node(struct kmem_cache *s, struct list_lru *lru,
+ 		gfp_t gfpflags, int node, unsigned long addr, size_t orig_size)
+ {
++	if (iscandar_active()) {
++		struct IscandarBridgeRecord rec = { };
++		void *object;
++
++		rec.op = ISCANDAR_OP_CACHE_ALLOC;
++		rec.cache_id = iscandar_cache_lookup(s);
++		rec.size = s->object_size;
++		rec.align = s->align;
++		if (rec.cache_id == 0)
++			/* A cache with no registry entry after the
++			 * raise: a finding, not a fallback. */
++			return NULL;
++		if (iscandar_bridge_call(&rec)
++		    || rec.status != ISCANDAR_BRIDGE_OK)
++			return NULL;
++		object = iscandar_offset_to_ptr(rec.result);
++		if (s->ctor)
++			s->ctor(object);
++		if (unlikely(gfpflags & __GFP_ZERO))
++			memset(object, 0, s->object_size);
++		return object;
++	}
++	iscandar_prefix_note(ISCANDAR_CENTER_SLAB_ALLOC,
++			     s->object_size);
+ 	void *object;
+ 	bool init = false;
+ 
+@@ -4325,6 +4354,17 @@
+ 
+ void *__kmalloc_large_noprof(size_t size, gfp_t flags)
+ {
++	if (iscandar_active()) {
++		struct IscandarBridgeRecord rec = { };
++
++		rec.op = ISCANDAR_OP_ALLOC_LARGE;
++		rec.size = size;
++		if (iscandar_bridge_call(&rec)
++		    || rec.status != ISCANDAR_BRIDGE_OK)
++			return NULL;
++		return iscandar_offset_to_ptr(rec.result);
++	}
++	iscandar_prefix_note(ISCANDAR_CENTER_KMALLOC_LARGE, size);
+ 	void *ret = ___kmalloc_large_node(size, flags, NUMA_NO_NODE);
+ 
+ 	trace_kmalloc(_RET_IP_, ret, size, PAGE_SIZE << get_order(size),
+@@ -4784,6 +4824,15 @@
+  */
+ void kmem_cache_free(struct kmem_cache *s, void *x)
+ {
++	if (iscandar_ptr_in_arena(x)) {
++		struct IscandarBridgeRecord rec = { };
++
++		rec.op = ISCANDAR_OP_FREE;
++		rec.size = iscandar_ptr_to_offset(x);
++		rec.cache_id = iscandar_cache_lookup(s);
++		(void)iscandar_bridge_call(&rec);
++		return;
++	}
+ 	s = cache_from_obj(s, x);
+ 	if (!s)
+ 		return;
+@@ -4816,6 +4865,14 @@
+  */
+ void kfree(const void *object)
+ {
++	if (iscandar_ptr_in_arena(object)) {
++		struct IscandarBridgeRecord rec = { };
++
++		rec.op = ISCANDAR_OP_FREE;
++		rec.size = iscandar_ptr_to_offset(object);
++		(void)iscandar_bridge_call(&rec);
++		return;
++	}
+ 	struct folio *folio;
+ 	struct slab *slab;
+ 	struct kmem_cache *s;
+@@ -4944,6 +5001,27 @@
+ /* Note that interrupts must be enabled when calling this function. */
+ void kmem_cache_free_bulk(struct kmem_cache *s, size_t size, void **p)
+ {
++	/* Each pointer decides by its own range: bridge-born
++	 * pointers go home one by one; the rest are compacted
++	 * to the tail and freed by the stock body below. */
++	size_t i, stock = size;
++
++	for (i = 0; i < size; i++) {
++		if (iscandar_ptr_in_arena(p[i])) {
++			struct IscandarBridgeRecord rec = { };
++
++			rec.op = ISCANDAR_OP_FREE;
++			rec.size = iscandar_ptr_to_offset(p[i]);
++			rec.cache_id = iscandar_cache_lookup(s);
++			(void)iscandar_bridge_call(&rec);
++			p[i] = p[--stock];
++			p[stock] = NULL;
++			i--;
++		}
++	}
++	size = stock;
++	if (size == 0)
++		return;
+ 	if (!size)
+ 		return;
+ 
