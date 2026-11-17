@@ -23,7 +23,13 @@
 #ifndef ISCANDAR_BRIDGE_H
 #define ISCANDAR_BRIDGE_H
 
+/* Fixed-width types: user space takes them from <stdint.h>.
+ * The kernel side has no <stdint.h> on its include path; the
+ * glue header includes <linux/types.h>, which provides the
+ * same uint8_t/uint32_t/uint64_t, before this header. */
+#ifndef __KERNEL__
 #include <stdint.h>
+#endif
 
 /* ---- The calibration and the arena --------------------------
  * The standing calibration of the live build: one engine
@@ -173,7 +179,7 @@
  * (byte offset from the arena base), aux the granted page
  * count. */
 
-typedef struct {
+typedef struct IscandarBridgeRecord {
     uint32_t op;
     uint32_t status;
     uint64_t cookie;
