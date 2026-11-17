@@ -34,7 +34,7 @@ the prefix.
 
 --- /dev/null
 +++ b/include/linux/iscandar.h
-@@ -0,0 +1,42 @@
+@@ -0,0 +1,49 @@
 +/* SPDX-License-Identifier: GPL-2.0 */
 +/* iscandar.h -- the kernel-internal bridge API. The shared
 + * definitions (constants, records, the control block) live
@@ -142,7 +142,7 @@ the prefix.
 +
 +struct page *iscandar_offset_to_page(u64 offset)
 +{
-+	return phys_to_page(iscandar_arena_phys + offset);
++	return pfn_to_page(PHYS_PFN(iscandar_arena_phys + offset));
 +}
 +
 +bool iscandar_ptr_in_arena(const void *p)
