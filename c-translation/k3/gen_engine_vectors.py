@@ -2,7 +2,7 @@
 """Generate the admission vectors for the C transcription of
 the request modes and the Engine (the modes tranche).
 
-The Python is the specification and the oracle: this script
+The Python is the specification and the reference engine: this script
 drives the Python Engine (allocator.Engine) and the Python
 mode table through a fixed operation script and writes two
 files:

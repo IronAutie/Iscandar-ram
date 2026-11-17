@@ -29,7 +29,7 @@
  *     FAIL), mapped value-for-value (see CubeEngine.c).
  *
  * Placement inside the cube is the real modes' probe
- * placement, no longer a stub's first fit. The test oracle
+ * placement, no longer a stub's first fit. The reference generator
  * (gen_k4_expected.py) drives the real Python Beam over the
  * real Python k=3 engine, so the Beam test now compares Beam
  * plus engine against Beam plus engine.

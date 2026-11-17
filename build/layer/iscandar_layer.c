@@ -7,7 +7,7 @@
  * shared definition), and it serves requests from the k=4
  * Beam over the real k=3 engine, admitted in c-translation/
  * under the standing rule (C admitted only where it
- * reproduces the Python oracle outputs exactly). The engine
+ * reproduces the Python reference engine's outputs exactly). The engine
  * core is Andrew's design; this file is scaffolding around
  * it: the raise, the fixtures, the extent ledger, the cache
  * registry, and the serving loop.

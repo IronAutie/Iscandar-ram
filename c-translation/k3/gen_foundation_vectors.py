@@ -1,6 +1,6 @@
 """Generate the expected vectors for the C foundation tranche.
 
-Python GENERATES the oracle: this script exercises the Python
+Python GENERATES the reference vectors: this script exercises the Python
 foundation modules (Geometry, Coordinate, Bijection,
 MPUPointer, Nothing, Error) and writes the canonical result
 lines to foundation_vectors_expected.txt. FoundationCheck.c

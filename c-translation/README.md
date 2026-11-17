@@ -2,8 +2,8 @@
 
 The Python engine is the specification. The C in this folder is its
 transcription, admitted under the standing rule: C is admitted only
-where it reproduces the Python and paper oracle outputs exactly.
-The Python remains the oracle and the offline tooling; no Python
+where it reproduces the Python reference engine's outputs exactly.
+The Python remains the reference engine and the offline tooling; no Python
 runs in the serving arrangement.
 
 ## k3/
@@ -14,7 +14,7 @@ the request modes (Nano, Tiny, Small, Large, Huge), the Mode/Modes
 dispatch, and the allocator Engine, with the author's gear C linked
 unchanged so the search cursors behave as they do under the Python.
 
-Admission evidence, generated against the Python oracle:
+Admission evidence, generated against the Python reference engine:
 
 - `gen_foundation_vectors.py` and `foundation_vectors_expected.txt`:
   101 vectors; `FoundationCheck.c` runs the identical script

@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # run_k4_c_tests.sh -- build the k=4 C transcription and test it
-# against the Python-generated oracle.
+# against the Python-generated reference transcript.
 #
-# Python generates the oracle (test_k4_expected.txt) by driving
+# The Python reference engine generates the expected transcript
+# (test_k4_expected.txt) by driving
 # the real Python Beam over the real Python k=3 engine; the C
 # driver (test_k4.c) runs the identical operation script over
 # Beam.c backed by the real k=3 C engine (the CubeEngine
-# adapter), and its output must diff empty against the oracle.
+# adapter), and its output must diff empty against the reference.
 # Uses the workspace venv python (bitstruct) unless $PYTHON
 # says otherwise.
 set -euo pipefail

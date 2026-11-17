@@ -1,9 +1,9 @@
 /* test_k4.c -- the C driver for the k=4 transcription test.
  *
  * Runs the identical operation script as gen_k4_expected.py
- * (the Python oracle) and prints the identical transcript.
+ * (the Python reference engine) and prints the identical transcript.
  * The outputs are diffed; the diff must be empty. Both sides
- * run the real k=3 engine per cube: the Python oracle through
+ * run the real k=3 engine per cube: the Python reference engine through
  * Beam.py, this driver through the CubeEngine adapter. See
  * CubeEngine.h for the boundary. */
 

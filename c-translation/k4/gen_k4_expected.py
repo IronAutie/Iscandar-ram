@@ -1,6 +1,7 @@
-"""gen_k4_expected.py -- the Python oracle for the k=4 C test.
+"""gen_k4_expected.py -- the reference generator for the k=4 C test.
 
-Python generates the oracle; the C is tested against it. This
+The Python reference engine generates the expected transcript;
+the C is tested against it. This
 script exercises the Python modules under test (Beam.py,
 BeamCoordinate.py, CPUPointer.py) over a fixed operation script
 and writes the transcript to test_k4_expected.txt. The C driver
