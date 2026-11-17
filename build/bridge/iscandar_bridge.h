@@ -196,7 +196,7 @@ typedef struct IscandarBridgeRecord {
  * the kernel side reads the arena base from it and keeps its
  * prefix counters here during the early-boot prefix. */
 
-typedef struct {
+typedef struct IscandarChannelControl {
     uint32_t magic;
     uint32_t version;
     uint64_t arena_base;        /* the layer's arena mapping base */
@@ -219,7 +219,7 @@ typedef struct {
 /* One early-boot prefix log entry, 16 bytes. Written by the
  * kernel side for stock-served calls during the prefix, so
  * the prefix is logged, not missed (ruling 4). */
-typedef struct {
+typedef struct IscandarPrefixEntry {
     uint32_t center;            /* ISCANDAR_CENTER_* */
     uint32_t size;              /* the byte request */
     uint64_t token;             /* the pointer the stock side gave */
