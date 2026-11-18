@@ -39,7 +39,10 @@
  *
  * Modes: --self-test runs a recorded-style request sequence
  * in-process and checks the balances; --serve PATH runs the
- * channel loop over a shared channel file at PATH. */
+ * channel loop over a shared channel file at PATH (the rig);
+ * --serve-region runs the same loop over the live build's
+ * reserved channel region, with the arena raised on the
+ * kernel's arena span (Task 6). */
 
 #define _POSIX_C_SOURCE 200809L
 
@@ -121,6 +124,44 @@ static void log_line(Layer *L, const char *fmt, ...)
     fflush(stdout);
 }
 
+/* ---- Region mode ------------------------------------------------
+ * --serve-region binds the layer to the live build's reserved
+ * spans instead of the rig's file: the arena is the kernel's
+ * arena span, mapped through /dev/iscandar (the bridge core's
+ * device) at file offset ISCANDAR_CHANNEL_BYTES, and the
+ * channel is the reserved channel region at offset 0. The
+ * addresses come from the boot line, read out of
+ * /proc/cmdline: one home for them. */
+
+static int      g_region;          /* nonzero in region mode */
+static uint64_t g_channel_phys;
+static uint64_t g_arena_phys;
+static int      g_dev_fd = -1;     /* /dev/iscandar, region mode */
+
+static int cmdline_phys(const char *key, uint64_t *out)
+{
+    FILE *f = fopen("/proc/cmdline", "r");
+    char buf[4096];
+    size_t n, klen = strlen(key);
+    const char *p;
+
+    if (!f) {
+        return -1;
+    }
+    n = fread(buf, 1, sizeof buf - 1, f);
+    fclose(f);
+    buf[n] = '\0';
+    p = buf;
+    while ((p = strstr(p, key)) != NULL) {
+        if ((p == buf || p[-1] == ' ') && p[klen] == '=') {
+            *out = strtoull(p + klen + 1, NULL, 0);
+            return 0;
+        }
+        p += klen;
+    }
+    return -1;
+}
+
 /* The ledger slice for a cube: 32,768 bins of 2 bytes, in the
  * arena at the cube's head. */
 static uint16_t *ledger_of(Layer *L, uint32_t cube)
@@ -159,11 +200,32 @@ static int layer_raise(Layer *L)
     memset(L, 0, sizeof *L);
 
     /* The arena: a virtual reservation of the full map size;
-     * the substrate faults pages in as grants touch them. */
-    L->arena = mmap(NULL, ISCANDAR_ARENA_BYTES, PROT_READ | PROT_WRITE,
-                    MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
-    if (L->arena == MAP_FAILED) {
-        return ISCANDAR_BRIDGE_REFUSED;
+     * the substrate faults pages in as grants touch them.
+     * In region mode the arena is the kernel's reserved span
+     * itself, mapped through the bridge core's device: the
+     * layer's ledger and fixtures then stand in the same
+     * memory the kernel's offset arithmetic names. */
+    if (g_region) {
+        g_dev_fd = open("/dev/iscandar", O_RDWR);
+        if (g_dev_fd < 0) {
+            return ISCANDAR_BRIDGE_REFUSED;
+        }
+        L->arena = mmap(NULL, ISCANDAR_ARENA_BYTES,
+                        PROT_READ | PROT_WRITE, MAP_SHARED,
+                        g_dev_fd, ISCANDAR_CHANNEL_BYTES);
+        if (L->arena == MAP_FAILED) {
+            close(g_dev_fd);
+            g_dev_fd = -1;
+            return ISCANDAR_BRIDGE_REFUSED;
+        }
+    } else {
+        L->arena = mmap(NULL, ISCANDAR_ARENA_BYTES,
+                        PROT_READ | PROT_WRITE,
+                        MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE,
+                        -1, 0);
+        if (L->arena == MAP_FAILED) {
+            return ISCANDAR_BRIDGE_REFUSED;
+        }
     }
 
     /* The layer's own state: the Beam is seated in storage
@@ -226,6 +288,10 @@ static void layer_lower(Layer *L)
     }
     if (L->ledger_file) {
         fclose(L->ledger_file);
+    }
+    if (g_dev_fd >= 0) {
+        close(g_dev_fd);
+        g_dev_fd = -1;
     }
     memset(L, 0, sizeof *L);
 }
@@ -814,34 +880,9 @@ static int self_test(void)
  * is the layer's half, and it doubles as the bench harness
  * the link-check drives a record through by hand. */
 
-static int serve_channel(Layer *L, const char *path)
+static int serve_loop(Layer *L, unsigned char *chan, const char *label)
 {
-    int fd;
-    unsigned char *chan;
     IscandarBridgeRecord *req_ring, *resp_ring;
-
-    fd = open(path, O_RDWR | O_CREAT, 0644);
-    if (fd < 0) {
-        return ISCANDAR_BRIDGE_REFUSED;
-    }
-    if (ftruncate(fd, ISCANDAR_CHANNEL_BYTES) != 0) {
-        close(fd);
-        return ISCANDAR_BRIDGE_REFUSED;
-    }
-    chan = mmap(NULL, ISCANDAR_CHANNEL_BYTES, PROT_READ | PROT_WRITE,
-                MAP_SHARED, fd, 0);
-    close(fd);
-    if (chan == MAP_FAILED) {
-        return ISCANDAR_BRIDGE_REFUSED;
-    }
-
-    memset(chan, 0, ISCANDAR_CHANNEL_BYTES);
-    L->control = (IscandarChannelControl *)(void *)chan;
-    L->control->magic = ISCANDAR_CHANNEL_MAGIC;
-    L->control->version = ISCANDAR_CHANNEL_VERSION;
-    L->control->arena_base = (uint64_t)(uintptr_t)L->arena;
-    L->control->arena_cubes = ISCANDAR_ARENA_CUBES;
-    L->control->channel_pages = ISCANDAR_CHANNEL_PAGES;
 
     req_ring = (IscandarBridgeRecord *)(void *)(chan
                    + (size_t)ISCANDAR_CHANNEL_CONTROL_PAGES
@@ -852,7 +893,7 @@ static int serve_channel(Layer *L, const char *path)
                      * ISCANDAR_PAGE_BYTES);
 
     log_line(L, "layer serving: arena base %p, %u cubes, channel %s\n",
-             (void *)L->arena, ISCANDAR_ARENA_CUBES, path);
+             (void *)L->arena, ISCANDAR_ARENA_CUBES, label);
 
     while (!L->control->stop) {
         if (L->control->req_head != L->control->req_tail) {
@@ -879,9 +920,108 @@ static int serve_channel(Layer *L, const char *path)
              (unsigned long long)L->refusals,
              (unsigned long long)L->invariants,
              (int)L->beam->count_overall);
+    return ISCANDAR_BRIDGE_OK;
+}
+
+static int serve_channel(Layer *L, const char *path)
+{
+    int fd, rc;
+    unsigned char *chan;
+
+    fd = open(path, O_RDWR | O_CREAT, 0644);
+    if (fd < 0) {
+        return ISCANDAR_BRIDGE_REFUSED;
+    }
+    if (ftruncate(fd, ISCANDAR_CHANNEL_BYTES) != 0) {
+        close(fd);
+        return ISCANDAR_BRIDGE_REFUSED;
+    }
+    chan = mmap(NULL, ISCANDAR_CHANNEL_BYTES, PROT_READ | PROT_WRITE,
+                MAP_SHARED, fd, 0);
+    close(fd);
+    if (chan == MAP_FAILED) {
+        return ISCANDAR_BRIDGE_REFUSED;
+    }
+
+    memset(chan, 0, ISCANDAR_CHANNEL_BYTES);
+    L->control = (IscandarChannelControl *)(void *)chan;
+    L->control->magic = ISCANDAR_CHANNEL_MAGIC;
+    L->control->version = ISCANDAR_CHANNEL_VERSION;
+    L->control->arena_base = (uint64_t)(uintptr_t)L->arena;
+    L->control->arena_cubes = ISCANDAR_ARENA_CUBES;
+    L->control->channel_pages = ISCANDAR_CHANNEL_PAGES;
+
+    rc = serve_loop(L, chan, path);
     munmap(chan, ISCANDAR_CHANNEL_BYTES);
     L->control = NULL;
-    return ISCANDAR_BRIDGE_OK;
+    return rc;
+}
+
+/* On the way down in region mode, the layer writes the channel
+ * snapshot itself: it is the one process holding the region.
+ * The finish step harvests the file. */
+static void snapshot_channel(unsigned char *chan)
+{
+    FILE *f = fopen("/var/log/iscandar/channel-snapshot.bin", "wb");
+
+    if (!f) {
+        f = fopen("channel-snapshot.bin", "wb");
+    }
+    if (!f) {
+        return;
+    }
+    fwrite(chan, 1, ISCANDAR_CHANNEL_BYTES, f);
+    fclose(f);
+}
+
+static int serve_region(Layer *L)
+{
+    int fd, rc;
+    unsigned char *chan;
+
+    fd = open("/dev/iscandar", O_RDWR);
+    if (fd < 0) {
+        return ISCANDAR_BRIDGE_REFUSED;
+    }
+    chan = mmap(NULL, ISCANDAR_CHANNEL_BYTES, PROT_READ | PROT_WRITE,
+                MAP_SHARED, fd, 0);
+    close(fd);
+    if (chan == MAP_FAILED) {
+        return ISCANDAR_BRIDGE_REFUSED;
+    }
+
+    /* Attach discipline (Task 6, Decision 4): no memset of the
+     * channel. The kernel's prefix writing stands in the
+     * control block's prefix fields and in the prefix log
+     * pages; the layer writes only the fields it owns, and
+     * zeroes the rings, which are empty by construction
+     * before the raise (bridge_call refuses until ready). */
+    L->control = (IscandarChannelControl *)(void *)chan;
+    memset(chan + (size_t)ISCANDAR_CHANNEL_CONTROL_PAGES
+             * ISCANDAR_PAGE_BYTES, 0,
+           (size_t)(ISCANDAR_CHANNEL_REQ_PAGES
+                    + ISCANDAR_CHANNEL_RESP_PAGES)
+             * ISCANDAR_PAGE_BYTES);
+    L->control->magic = ISCANDAR_CHANNEL_MAGIC;
+    L->control->version = ISCANDAR_CHANNEL_VERSION;
+    L->control->arena_base = (uint64_t)(uintptr_t)L->arena;
+    L->control->arena_cubes = ISCANDAR_ARENA_CUBES;
+    L->control->channel_pages = ISCANDAR_CHANNEL_PAGES;
+    L->control->req_head = 0;
+    L->control->req_tail = 0;
+    L->control->resp_head = 0;
+    L->control->resp_tail = 0;
+    L->control->requests_served = 0;
+    L->control->refusals = 0;
+    L->control->invariant_violations = 0;
+    L->control->stop = 0;
+    __sync_synchronize();
+
+    rc = serve_loop(L, chan, "/dev/iscandar channel region");
+    snapshot_channel(chan);
+    munmap(chan, ISCANDAR_CHANNEL_BYTES);
+    L->control = NULL;
+    return rc;
 }
 
 int main(int argc, char **argv)
@@ -911,7 +1051,35 @@ int main(int argc, char **argv)
         layer_lower(&L);
         return rc == ISCANDAR_BRIDGE_OK ? 0 : 1;
     }
-    fprintf(stderr, "usage: %s --self-test | --serve CHANNEL-FILE\n",
-            argv[0]);
+    if (argc >= 2 && strcmp(argv[1], "--serve-region") == 0) {
+        if (cmdline_phys("iscandar_channel", &g_channel_phys) != 0
+            || cmdline_phys("iscandar_arena", &g_arena_phys) != 0
+            || !g_channel_phys || !g_arena_phys) {
+            fprintf(stderr, "iscandar-layer: --serve-region needs "
+                    "iscandar_channel= and iscandar_arena= on the "
+                    "kernel command line\n");
+            return 1;
+        }
+        g_region = 1;
+        rc = layer_raise(&L);
+        if (rc != ISCANDAR_BRIDGE_OK) {
+            fprintf(stderr, "iscandar-layer: raise failed, status %d\n",
+                    rc);
+            return 1;
+        }
+        L.ledger_file = fopen("/var/log/iscandar/layer-ledger.txt", "a");
+        if (!L.ledger_file) {
+            L.ledger_file = fopen("iscandar-layer-ledger.txt", "a");
+        }
+        log_line(&L, "iscandar layer raised: %u pages, fixtures %u, "
+                     "net served %u\n",
+                 ISCANDAR_ARENA_PAGES, ISCANDAR_FIXTURE_PAGES_TOTAL,
+                 ISCANDAR_NET_SERVED_PAGES);
+        rc = serve_region(&L);
+        layer_lower(&L);
+        return rc == ISCANDAR_BRIDGE_OK ? 0 : 1;
+    }
+    fprintf(stderr, "usage: %s --self-test | --serve CHANNEL-FILE "
+                    "| --serve-region\n", argv[0]);
     return 2;
 }

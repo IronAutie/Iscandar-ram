@@ -41,6 +41,9 @@ security) carries the Debian patch stack; the pristine
 upstream tarball above is the tree of record, matching the
 tree the sift, reconciliation, and dye were read against.
 
+DONE 2026-11-17: tarball SHA-256 verified against the
+published sum and unpacked to ~/linux-6.12.116 on telesart.
+
 ## Task 4. Rebase the patches
 
 Apply 0005 first, then 0001 to 0004. Copy
@@ -52,7 +55,28 @@ Resolve each center at its patch-point line against the real
 tree. The percpu chunk question and the vfree_atomic question
 are answered here, by the tree.
 
+DONE 2026-11-17: 0005 applied first (its mm/Makefile hunk
+failed and was hand-fixed; the bridge object line stands
+exactly once), rebased 0001 to 0004 applied clean with
+zero rejects, shared header copied to
+include/iscandar_bridge.h per the header ruling, and
+`#include <linux/iscandar.h>` stands exactly once in each
+of the five target files. The percpu center is served
+under the uniprocessor precondition (see Task 5) and the
+vfree door was fixed as ruled; both are recorded in the
+rebase report, section 9.
+
 ## Task 5. Build the kernel
+
+DONE 2026-11-17: config of record byte-checked at the
+bench (SHA-256 matches), copied to .config, SMP disabled
+and verified (# CONFIG_SMP is not set), make olddefconfig
+completed (one benign warning: .config:9970 symbol value
+'m' invalid for ANDROID_BINDER_IPC). All six patched
+objects compiled clean (mm/iscandar_bridge.o, mm/slub.o,
+mm/slab_common.o, mm/vmalloc.o, mm/percpu.o,
+lib/genalloc.o). Full build finished exit=0; bzImage
+verified at the bench: 10,338,816 bytes, Nov 17 16:26.
 
 With the Fubuki config of record: `telezart-kconfig` in
 ~/telezart/elbe-build-20261103-204902/ on telesart,
@@ -74,6 +98,31 @@ arena base to the arena span's physical start; bind the
 layer's serve path to the reserved channel region; confirm
 the raise registers the prefix-born caches from the prefix
 counters.
+
+State found 2026-11-17, before any boot: this task is real
+desk work, not a boot line. The bridge core as applied is
+missing its binding body: nothing assigns iscandar_ctrl
+(no mapping of the channel region), the arena kernel
+mapping is never made, and /proc/iscandar_bridge exists
+only as the closing comment's outline (the design always
+said the proc body is written at application time). The
+kernel links and boots without it because the prefix
+posture is silent by construction: ctrl NULL, ready false,
+every center stock-served. The layer likewise still serves
+the rig's channel file; serving the reserved region (and
+not zeroing the kernel's prefix counters and log when it
+attaches) is unwritten. So the boot waits on: (1) the core
+body: early mapping of both spans, the proc file with the
+raise write and the state read, the raise registering the
+prefix-born caches; (2) the layer's region mode; (3) the
+span choices and memmap reservation for the boot line.
+Then Task 8.
+
+Drafted 2026-11-17 in build/bridge/TASK6-BINDING-DRAFT.md.
+Decision 1 RULED the same day: (B), the guest goes to
+-m 1024 and the arena span is the second 512 MiB at phys
+0x20000000, channel 512 KiB at 0x1FFE0000; every settled
+figure stands; efficiency deferred by Andrew's word.
 
 ## Task 7. Stage the payload, submit ELBE
 

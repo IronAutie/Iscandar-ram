@@ -1,0 +1,383 @@
+From: Iscandar-ram build (Paper 3, Task 6 binding)
+Subject: [PATCH 0006] bridge core: the binding body
+
+Applies on top of 0005's core as it stands in the tree
+(mm/iscandar_bridge.c, 220 lines). Implements the Task 6
+binding package of build/bridge/TASK6-BINDING-DRAFT.md,
+as ruled 2026-11-17:
+
+- Decision 1(B): the arena is a physically reserved span;
+  this patch is span-agnostic, the addresses arrive by
+  boot parameter as staged.
+- Decision 2: the __setup handlers reserve their spans
+  with memblock_reserve while memblock still rules, and
+  the arena handler sets the kernel mapping base.
+- Decision 3: a misc device, /dev/iscandar, maps the
+  channel at file offset 0 and the arena at file offset
+  ISCANDAR_CHANNEL_BYTES, for the layer's region mode.
+- The proc body the staged core left in outline:
+  /proc/iscandar_bridge, first line "state ready" or
+  "state prefix" (the raise unit's contract), writes
+  "raise" and "stop". The raise verifies the layer's
+  magic and version, opens the bridge, and registers
+  the prefix-born caches by enumerating slab_caches.
+- The arena self-check: a pattern written through an
+  offset's kernel pointer and read back through the
+  offset's struct page, reported on the proc read.
+- Bridged-call latency accumulators (mean, variance,
+  min, max in microseconds; timeouts counted apart),
+  reported on the proc read.
+
+Verification at staging: this patch applied to a core
+file reconstructed from 0005 reproduces the edited core
+byte for byte. Field names against the tree (kmem_cache
+object_size, align, flags; slab_caches and slab_mutex
+from mm's "slab.h") are confirmed when the object
+compiles at the bench.
+
+---
+--- a/mm/iscandar_bridge.c
++++ b/mm/iscandar_bridge.c
+@@ -8,14 +8,22 @@
+ #include <linux/atomic.h>
+ #include <linux/delay.h>
+ #include <linux/genalloc.h>
++#include <linux/init.h>
+ #include <linux/io.h>
+ #include <linux/iscandar.h>
++#include <linux/ktime.h>
++#include <linux/memblock.h>
++#include <linux/miscdevice.h>
++#include <linux/mm.h>
+ #include <linux/mutex.h>
+ #include <linux/proc_fs.h>
++#include <linux/seq_file.h>
+ #include <linux/slab.h>
+ #include <linux/string.h>
+ #include <linux/uaccess.h>
+ 
++#include "slab.h"
++
+ static u64 iscandar_channel_phys;
+ static u64 iscandar_arena_phys;
+ static void *iscandar_arena_base;	/* kernel mapping */
+@@ -30,6 +38,12 @@
+ static int __init iscandar_channel_setup(char *str)
+ {
+ 	iscandar_channel_phys = memparse(str, NULL);
++	/* Reserve while memblock still rules (Task 6,
++	 * Decision 2): the span keeps its struct pages and
++	 * the buddy allocator never sees it. */
++	if (iscandar_channel_phys)
++		memblock_reserve(iscandar_channel_phys,
++				 ISCANDAR_CHANNEL_BYTES);
+ 	return 1;
+ }
+ __setup("iscandar_channel=", iscandar_channel_setup);
+@@ -37,6 +51,12 @@
+ static int __init iscandar_arena_setup(char *str)
+ {
+ 	iscandar_arena_phys = memparse(str, NULL);
++	if (iscandar_arena_phys) {
++		memblock_reserve(iscandar_arena_phys,
++				 ISCANDAR_ARENA_BYTES);
++		iscandar_arena_base =
++			phys_to_virt(iscandar_arena_phys);
++	}
+ 	return 1;
+ }
+ __setup("iscandar_arena=", iscandar_arena_setup);
+@@ -107,10 +127,45 @@
+ 	}
+ }
+ 
++/* Bridged-call latency, caller-visible: from the call's
++ * entry (before the serializing mutex) to its response.
++ * Microseconds. Samples past the cap are counted apart
++ * and kept out of the sumsq, so the accumulators cannot
++ * overflow on a 5 s timeout's square. All updates happen
++ * under iscandar_call_lock, which serializes the calls
++ * themselves, so the statistics need no lock of their
++ * own. */
++#define ISCANDAR_LAT_CAP_US	100000	/* 100 ms */
++static u64 iscandar_lat_n;
++static u64 iscandar_lat_sum_us;
++static u64 iscandar_lat_sumsq_us;
++static u64 iscandar_lat_min_us = U64_MAX;
++static u64 iscandar_lat_max_us;
++static u64 iscandar_lat_slow;
++static u64 iscandar_timeouts;
++
++static void iscandar_lat_note(u64 t0_ns)
++{
++	u64 dt_us = div_u64(ktime_get_ns() - t0_ns, 1000);
++
++	iscandar_lat_n++;
++	if (dt_us > ISCANDAR_LAT_CAP_US) {
++		iscandar_lat_slow++;
++		return;
++	}
++	iscandar_lat_sum_us += dt_us;
++	iscandar_lat_sumsq_us += dt_us * dt_us;
++	if (dt_us < iscandar_lat_min_us)
++		iscandar_lat_min_us = dt_us;
++	if (dt_us > iscandar_lat_max_us)
++		iscandar_lat_max_us = dt_us;
++}
++
+ int iscandar_bridge_call(struct IscandarBridgeRecord *rec)
+ {
+ 	u32 tail;
+ 	int waited = 0;
++	u64 t0 = ktime_get_ns();
+ 
+ 	if (!iscandar_ready || !iscandar_ctrl)
+ 		return -ENODEV;
+@@ -121,6 +176,7 @@
+ 	iscandar_ctrl->req_tail = tail + 1;
+ 	while (iscandar_ctrl->resp_tail == tail) {
+ 		if (++waited > 5000) {	/* 5 s at 1 ms polls */
++			iscandar_timeouts++;
+ 			mutex_unlock(&iscandar_call_lock);
+ 			pr_err("iscandar: bridge timeout, op %u\n", rec->op);
+ 			return -ETIMEDOUT;
+@@ -129,6 +185,7 @@
+ 	}
+ 	smp_rmb();
+ 	*rec = iscandar_resp_ring[tail % ISCANDAR_RING_RECORDS];
++	iscandar_lat_note(t0);
+ 	mutex_unlock(&iscandar_call_lock);
+ 	return 0;
+ }
+@@ -218,3 +275,231 @@
+  * body is staged in outline: its shape is fixed, its
+  * seq_file plumbing is the tree's own idiom and is written
+  * at application time. */
++
++/* Binding body (Task 6), written at application time as
++ * the outline above provides. The mapping happens at
++ * postcore: after mm_init, so the earliest prefix notes
++ * (the kmalloc caches are born in mm_init, before any
++ * initcall) find iscandar_ctrl NULL and are dropped by
++ * the staged check in iscandar_prefix_note. The registry
++ * does not depend on those notes: the raise enumerates
++ * the live caches. The prefix counters are exact from
++ * the mapping on and undercount the first moments
++ * before it; the boundary is stated, not hidden. */
++
++static int iscandar_selfcheck_rc = -ENODEV;
++
++/* The arena self-check: the chain's last link, proven by
++ * the kernel alone before any raise. Offset one page is
++ * a fixture page (the ledger's second page): never
++ * granted, so it is safe scratch. Write a pattern through
++ * the offset's kernel pointer, read it back through the
++ * offset's struct page. Agreement means offset, page, and
++ * memory are one thing. */
++static int __init iscandar_arena_selfcheck(void)
++{
++	u64 offset = ISCANDAR_PAGE_BYTES;
++	volatile u32 *via_ptr;
++	struct page *pg;
++	u32 *via_page;
++	u32 pattern = ISCANDAR_CHANNEL_MAGIC;
++
++	if (!iscandar_arena_base)
++		return -ENODEV;
++	via_ptr = iscandar_offset_to_ptr(offset);
++	pg = iscandar_offset_to_page(offset);
++	if (!via_ptr || !pg)
++		return -ENODEV;
++	via_page = page_address(pg);
++	if (!via_page)
++		return -ENODEV;
++	*via_ptr = pattern;
++	smp_wmb();
++	if (*via_page != pattern)
++		return -EIO;
++	*via_ptr = 0;
++	return 0;
++}
++
++/* The raise: the layer's control block must carry the
++ * magic and the version; then the bridge opens, and the
++ * caches born during the prefix are registered by
++ * enumerating the live cache list (mm's own slab_caches,
++ * under slab_mutex). Registration is the first bridged
++ * traffic, so ready is set before the enumeration.
++ * Allocations from a cache not yet enumerated, in the
++ * raise window, take the centers' unregistered path,
++ * which is the prefix posture: stock-served. New cache
++ * creation waits on slab_mutex for the enumeration's
++ * duration, bounded by the registry cap at one bridged
++ * call each. */
++static int iscandar_raise(void)
++{
++	struct kmem_cache *s;
++	int registered = 0, failed = 0;
++
++	if (!iscandar_ctrl)
++		return -ENODEV;
++	if (iscandar_ready)
++		return 0;
++	if (iscandar_ctrl->magic != ISCANDAR_CHANNEL_MAGIC
++	    || iscandar_ctrl->version != ISCANDAR_CHANNEL_VERSION)
++		return -EPROTO;
++	WRITE_ONCE(iscandar_ready, true);
++	mutex_lock(&slab_mutex);
++	list_for_each_entry(s, &slab_caches, list) {
++		if (iscandar_cache_lookup(s))
++			continue;
++		if (iscandar_cache_register(s, s->object_size,
++					    s->align, s->flags))
++			failed++;
++		else
++			registered++;
++	}
++	mutex_unlock(&slab_mutex);
++	pr_info("iscandar: raise: %d caches registered, %d failed\n",
++		registered, failed);
++	return failed ? -ENOSPC : 0;
++}
++
++static ssize_t iscandar_bridge_write(struct file *file,
++				     const char __user *buf,
++				     size_t count, loff_t *ppos)
++{
++	char word[16];
++
++	if (count >= sizeof(word))
++		return -EINVAL;
++	if (copy_from_user(word, buf, count))
++		return -EFAULT;
++	word[count] = '\0';
++	if (strncmp(word, "raise", 5) == 0)
++		return iscandar_raise() ?: (ssize_t)count;
++	if (strncmp(word, "stop", 4) == 0) {
++		if (!iscandar_ctrl)
++			return -ENODEV;
++		WRITE_ONCE(iscandar_ctrl->stop, 1);
++		return count;
++	}
++	return -EINVAL;
++}
++
++static int iscandar_bridge_show(struct seq_file *m, void *v)
++{
++	u64 n = iscandar_lat_n - iscandar_lat_slow;
++	u64 mean = 0, var = 0;
++	int i;
++
++	seq_printf(m, "state %s\n",
++		   iscandar_ready ? "ready" : "prefix");
++	if (!iscandar_ctrl) {
++		seq_puts(m, "binding absent: no channel span\n");
++		return 0;
++	}
++	seq_printf(m, "arena self-check: %s\n",
++		   iscandar_selfcheck_rc == 0 ? "PASS" : "FAIL");
++	seq_printf(m, "prefix log written %u, overflow %u\n",
++		   iscandar_ctrl->prefix_log_written,
++		   iscandar_ctrl->prefix_overflow);
++	for (i = 0; i < ISCANDAR_CENTER_COUNT; i++)
++		if (iscandar_ctrl->prefix_calls[i])
++			seq_printf(m, "prefix calls center %d: %u\n",
++				   i, iscandar_ctrl->prefix_calls[i]);
++	seq_printf(m, "slab page watch: %lld\n",
++		   (long long)atomic64_read(&iscandar_slab_page_calls));
++	seq_printf(m, "bridge timeouts: %llu\n",
++		   (unsigned long long)iscandar_timeouts);
++	if (n) {
++		mean = div_u64(iscandar_lat_sum_us, n);
++		var = div_u64(iscandar_lat_sumsq_us, n);
++		var = var > mean * mean ? var - mean * mean : 0;
++	}
++	seq_printf(m, "bridge latency us: n %llu slow %llu "
++		   "mean %llu var %llu min %llu max %llu\n",
++		   (unsigned long long)iscandar_lat_n,
++		   (unsigned long long)iscandar_lat_slow,
++		   (unsigned long long)mean,
++		   (unsigned long long)var,
++		   (unsigned long long)(n
++			&& iscandar_lat_min_us != U64_MAX
++			? iscandar_lat_min_us : 0),
++		   (unsigned long long)iscandar_lat_max_us);
++	return 0;
++}
++
++static int iscandar_bridge_open(struct inode *inode,
++				struct file *file)
++{
++	return single_open(file, iscandar_bridge_show, NULL);
++}
++
++static const struct proc_ops iscandar_bridge_proc_ops = {
++	.proc_open	= iscandar_bridge_open,
++	.proc_read	= seq_read,
++	.proc_write	= iscandar_bridge_write,
++	.proc_lseek	= seq_lseek,
++	.proc_release	= single_release,
++};
++
++/* /dev/iscandar: file offset 0 maps the channel, file
++ * offset ISCANDAR_CHANNEL_BYTES maps the arena. */
++static int iscandar_dev_mmap(struct file *file,
++			     struct vm_area_struct *vma)
++{
++	u64 off = (u64)vma->vm_pgoff << PAGE_SHIFT;
++	u64 phys, size;
++
++	if (off == 0) {
++		phys = iscandar_channel_phys;
++		size = ISCANDAR_CHANNEL_BYTES;
++	} else if (off == ISCANDAR_CHANNEL_BYTES) {
++		phys = iscandar_arena_phys;
++		size = ISCANDAR_ARENA_BYTES;
++	} else {
++		return -EINVAL;
++	}
++	if (!phys || (vma->vm_end - vma->vm_start) > size)
++		return -EINVAL;
++	return remap_pfn_range(vma, vma->vm_start,
++			       PHYS_PFN(phys),
++			       vma->vm_end - vma->vm_start,
++			       vma->vm_page_prot);
++}
++
++static const struct file_operations iscandar_dev_fops = {
++	.owner	= THIS_MODULE,
++	.mmap	= iscandar_dev_mmap,
++};
++
++static struct miscdevice iscandar_dev = {
++	.minor	= MISC_DYNAMIC_MINOR,
++	.name	= "iscandar",
++	.fops	= &iscandar_dev_fops,
++};
++
++static int __init iscandar_bridge_init(void)
++{
++	if (iscandar_channel_phys) {
++		iscandar_ctrl = memremap(iscandar_channel_phys,
++					 ISCANDAR_CHANNEL_BYTES,
++					 MEMREMAP_WB);
++		if (!iscandar_ctrl) {
++			pr_err("iscandar: channel memremap failed\n");
++			return -ENOMEM;
++		}
++		iscandar_req_ring = (struct IscandarBridgeRecord *)
++			((char *)iscandar_ctrl + ISCANDAR_PAGE_BYTES);
++		iscandar_resp_ring = (struct IscandarBridgeRecord *)
++			((char *)iscandar_ctrl + ISCANDAR_PAGE_BYTES
++			 + (size_t)ISCANDAR_CHANNEL_REQ_PAGES
++			   * ISCANDAR_PAGE_BYTES);
++		if (misc_register(&iscandar_dev))
++			pr_err("iscandar: /dev/iscandar not registered\n");
++	}
++	if (iscandar_arena_base)
++		iscandar_selfcheck_rc = iscandar_arena_selfcheck();
++	proc_create("iscandar_bridge", 0644, NULL,
++		    &iscandar_bridge_proc_ops);
++	return 0;
++}
++postcore_initcall(iscandar_bridge_init);

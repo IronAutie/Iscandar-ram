@@ -7,8 +7,7 @@ ConditionPathExists=/usr/local/sbin/iscandar-layer
 [Service]
 Type=simple
 ExecStartPre=/bin/mkdir -p /run/iscandar /var/log/iscandar
-ExecStartPre=/bin/rm -f /run/iscandar/channel.bin
-ExecStart=/usr/local/sbin/iscandar-layer --serve /run/iscandar/channel.bin
+ExecStart=/usr/local/sbin/iscandar-layer --serve-region
 StandardOutput=journal+console
 StandardError=journal+console
 Restart=no
