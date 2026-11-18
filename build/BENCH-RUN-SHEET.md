@@ -123,6 +123,20 @@ Decision 1 RULED the same day: (B), the guest goes to
 -m 1024 and the arena span is the second 512 MiB at phys
 0x20000000, channel 512 KiB at 0x1FFE0000; every settled
 figure stands; efficiency deferred by Andrew's word.
+Open point RULED the same day: measure the violations
+first, fix next round from the count.
+
+IMPLEMENTED 2026-11-17 (commit 448dec7): patch
+0006-bridge-binding.patch carries the core body
+(verified against a core reconstructed from 0005: the
+patch reproduces the edited core byte for byte); the
+layer's --serve-region is implemented and self-tested
+here (842 checks PASS); the layer unit and the finish
+script moved to region mode and the ELBE XML bodies
+regenerated to match; link-check 11/11 here. Bench
+round remaining: push, pull on telesart, apply 0006 in
+the tree, rebuild the kernel, rebuild the layer there,
+resubmit the image, restage the payload.
 
 ## Task 7. Stage the payload, submit ELBE
 
