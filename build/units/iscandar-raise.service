@@ -5,7 +5,7 @@ Before=iscandar-exerciser.service
 
 [Service]
 Type=oneshot
-ExecStart=/bin/sh -c 'for i in $(seq 1 50); do if grep -q "state ready" /proc/iscandar_bridge 2>/dev/null; then exit 0; fi; echo raise > /proc/iscandar_bridge 2>/dev/null || true; sleep 0.2; done; echo "iscandar-raise: the bridge did not come up" >&2; exit 1'
+ExecStart=/bin/sh -c 'for i in $(seq 1 600); do if grep -q "state ready" /proc/iscandar_bridge 2>/dev/null; then exit 0; fi; echo raise > /proc/iscandar_bridge 2>/dev/null || true; sleep 0.2; done; echo "iscandar-raise: the bridge did not come up; final bridge state follows" >&2; cat /proc/iscandar_bridge >&2 2>/dev/null || true; exit 1'
 StandardOutput=journal+console
 StandardError=journal+console
 

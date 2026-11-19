@@ -1,7 +1,11 @@
 [Unit]
 Description=Iscandar page exerciser (Paper 3 evidence run)
 Documentation=file:/usr/local/share/doc/iscandar-exerciser/README.md
-After=multi-user.target
+After=iscandar-raise.service multi-user.target
+# A failed raise must stop this run: without the Requires,
+# an unraised run exports evidence that looks like a raised
+# one (bench finding, 2026-11-17 evening).
+Requires=iscandar-raise.service
 # The evidence rig's finish service (trace export and shutdown)
 # orders itself After=iscandar-exerciser.service.
 

@@ -353,7 +353,7 @@ Before=iscandar-exerciser.service
 
 [Service]
 Type=oneshot
-ExecStart=/bin/sh -c 'for i in $(seq 1 50); do if grep -q "state ready" /proc/iscandar_bridge 2&gt;/dev/null; then exit 0; fi; echo raise &gt; /proc/iscandar_bridge 2&gt;/dev/null || true; sleep 0.2; done; echo "iscandar-raise: the bridge did not come up" &gt;&amp;2; exit 1'
+ExecStart=/bin/sh -c 'for i in $(seq 1 600); do if grep -q "state ready" /proc/iscandar_bridge 2&gt;/dev/null; then exit 0; fi; echo raise &gt; /proc/iscandar_bridge 2&gt;/dev/null || true; sleep 0.2; done; echo "iscandar-raise: the bridge did not come up; final bridge state follows" &gt;&amp;2; cat /proc/iscandar_bridge &gt;&amp;2 2&gt;/dev/null || true; exit 1'
 StandardOutput=journal+console
 StandardError=journal+console
 
@@ -363,7 +363,11 @@ WantedBy=multi-user.target
 			<file dst="/etc/systemd/system/iscandar-exerciser.service">[Unit]
 Description=Iscandar page exerciser (Paper 3 evidence run)
 Documentation=file:/usr/local/share/doc/iscandar-exerciser/README.md
-After=multi-user.target
+After=iscandar-raise.service multi-user.target
+# A failed raise must stop this run: without the Requires,
+# an unraised run exports evidence that looks like a raised
+# one (bench finding, 2026-11-17 evening).
+Requires=iscandar-raise.service
 # The evidence rig's finish service (trace export and shutdown)
 # orders itself After=iscandar-exerciser.service.
 

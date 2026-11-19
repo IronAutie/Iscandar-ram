@@ -204,6 +204,8 @@ grep -q "Before=iscandar-layer.service" units/iscandar-payload.service || BO="pa
 grep -q "After=iscandar-layer.service" units/iscandar-raise.service || BO="raise not After the layer"
 grep -q "Before=iscandar-exerciser.service" units/iscandar-raise.service || BO="raise not Before the exerciser"
 grep -q "After=iscandar-exerciser.service" units/iscandar-finish.service || BO="finish not After the exerciser"
+grep -q "Requires=iscandar-raise.service" ../exerciser/iscandar-exerciser.service || BO="exerciser does not Require the raise"
+grep -q "After=iscandar-raise.service" ../exerciser/iscandar-exerciser.service || BO="exerciser not After the raise"
 if [ "$BO" = ok ]; then pass boot-order; else fail boot-order "$BO"; fi
 
 if [ $FAILS -eq 0 ]; then

@@ -150,7 +150,7 @@ register.
 
 ## Task 8. Boot the evidence run
 
-QEMU at `-m 512`, patched kernel and initrd handed in by
+QEMU at `-m 1024` (Task 6 Decision 1(B)), patched kernel and initrd handed in by
 `-kernel` and `-initrd`, trace armed (`trace_pipe_arm`),
 `iscandar_channel=` and `iscandar_arena=` naming the reserved
 regions, 9p share up for payload and exports, serial console
@@ -165,3 +165,79 @@ criterion fixed in advance: is this a direct replacement,
 and does it run without a panic. Then the run-dependent
 manuscript sections (Abstract, Measurements, Conclusion)
 are written from the run's numbers.
+
+## Bench findings, 2026-11-17 evening (first boot attempts)
+
+Config delta, now part of the config of record: the boot
+pairing is our kernel with ELBE's initrd, and ELBE's modules
+cannot load in our build, so the boot-path drivers are
+built in. Flipped from `=m` to `=y`: `VIRTIO_BLK`, `NET_9P`,
+`NET_9P_VIRTIO`, `9P_FS`, `EXT4_FS`, `LIBCRC32C` (`JBD2`
+followed `EXT4_FS` by select). Everything else unchanged.
+Kernel rebuilt with `make -j1` (a `-j$(nproc)` build was
+OOM-killed at the vmlinux link); bzImage 10,351,104 bytes
+before the flips. Layer self-test at the bench: PASS
+(842 checks, 0 failures, net served 130,988). ELBE image
+built at `elbe-build-20261117-194225`.
+
+Three boots. Boot 1: initrd gave up waiting for the root
+device (no block drivers). Boot 2: root mount failed (no
+ext4). Boot 3 reached systemd, then userspace collapsed:
+sh, agetty, cron and a respawning unit segfaulted in the
+dynamic loader executing zero-filled pages, the RCU stall
+detector fired with the CPU idle, and the clocksource
+reported a 316-second readout interval. No panic, no
+Iscandar frames in any stack.
+
+The channel control block, read from the QEMU monitor
+after the hang, settles the engagement question: magic,
+version, arena base, 4 cubes and 128 channel pages all
+written by the layer; request tail 0, response tail 0,
+requests served 0; prefix counters about 785,000 calls,
+16,128 log entries, overflow set. The bridge never served
+a single allocation. The engine was never exercised; it
+stands untested, not failed.
+
+Three faults, in order. (1) Setup: the config's boot-path
+closure was never checked against the our-kernel /
+ELBE-initrd pairing (fixed by the delta above). (2) Setup:
+the raise never engaged. Correction to the first writing
+of this finding (checked against the unit on disk
+2026-11-18): the raise unit itself retries 50 times over
+about ten seconds and exits 1 loudly in the journal; it
+is not fail-open. The hole is downstream: the exerciser
+unit carries no Requires on the raise, so a failed raise
+still lets the exerciser and finish run unraised and
+export evidence indistinguishable from a raised run.
+Lead suspect remains the attach race (the raise's window
+against the layer's control-block write); the fix is a
+raise that waits on the control block's magic, and an
+exerciser that Requires the raise.
+
+Fix applied here, 2026-11-18 evening (reaches the bench
+on the next pull). The raise's probe loop now runs 600
+tries over about two minutes: the write is the probe,
+because the kernel refuses with -EPROTO until the
+control block carries the magic and the version, so the
+loop is the synchronization with the layer's attach. On
+exhaustion the unit dumps the final bridge state into
+the journal before exiting 1. The exerciser unit now
+carries Requires and After on the raise, so a failed
+raise stops the evidence run instead of letting it run
+unraised. Link-check's boot-order check asserts both
+lines, the ELBE XML inline copies are regenerated to
+match, and the set passes 11/11 here. The cross-boundary
+canary and the bisect boots below follow the fix.
+(3) Open: the zero-page deaths happened in the prefix
+posture, so they are not the serving path. The corruption
+is zero-shaped, the signature of a memset landing on live
+memory; the new writers aimed by physical address are the
+kernel's arena binding (patch 0006) and the layer's arena
+attach. Suspect, not verdict.
+
+Next round bisects by construction: boot the patched
+kernel with the spans and the Iscandar units disabled and
+confirm userspace lives; then start the layer by hand and
+watch the attach. The guest image at
+`elbe-build-20261117-194225` keeps its journal for
+forensics.
