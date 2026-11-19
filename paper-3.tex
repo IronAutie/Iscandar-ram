@@ -267,6 +267,8 @@ promoted here to evidence.
 \item And it closes with the hand-off: when this step is built and the boot of section 10 runs on the patched kernel, the measurements that follow are the paper's evidence, and the audit reads them against the prediction and the control.
 \end{itemize}
 
+A caution at the macro scale. The results of the earlier papers concern the allocator itself: given the arena as specified, the mapping is a bijection and the accounting is exact. They say nothing about whether the arena as specified is the arena as built. The bridge binds the engine to physical spans whose addresses arrive as boot parameters, and every check the kernel performs on its own binding shares the kernel's premise about those spans, so a wrong premise validates itself. The discipline adopted here is a cross-boundary canary. Before the raise, the layer writes a known pattern through its own mapping of the arena and the kernel reads it back through the direct map; the kernel then writes a second pattern for the layer to read. Only when both directions agree is the premise treated as measured rather than assumed. The theorems work. At this scale, however, a theorem's hypotheses are physical facts, and a physical fact requires a witness that does not share it.
+
 \section{Accommodations for Operating System as an Application}
 % Status: written 2026-11-10 at Andrew's direction, recording the
 % concessions the PC rig makes in simulating the real system's
