@@ -241,3 +241,37 @@ confirm userspace lives; then start the layer by hand and
 watch the attach. The guest image at
 `elbe-build-20261117-194225` keeps its journal for
 forensics.
+
+## Bench findings, 2026-11-18 evening (bisect boots)
+
+The raise fix above is in the image built this evening
+(`elbe-build-20261118-195332`); link-check passed 11/11
+on telesart before the build. Two bisect boots, same
+kernel and spans as the failed runs:
+
+Boot A (all five Iscandar units masked on the kernel
+command line): fast login, shell healthy. `/proc` read:
+state prefix, arena self-check PASS, prefix log written
+16,128 with overflow set (the log saturates during every
+boot; the hung guest's identical figure is a property of
+the boot, not of the failure), center 11 at 742,670
+calls. `dmesg` segfault count 0. The kernel binding and
+the reserved spans stand next to a living userspace and
+nothing dies: exonerated.
+
+Boot B (raise, exerciser and finish masked; payload and
+layer live): login, layer active, bridge state mirrors
+Boot A (center 11 at 737,538), segfault count 0. The
+control block, read from the QEMU monitor and decoded
+against the shared header: magic, version, the layer's
+arena base, 4 cubes, 128 channel pages; all ring indices
+zero; requests served, refusals and invariant violations
+zero; prefix counters live and matching the `/proc`
+read; stop 0. The layer's attach is exonerated by the
+same construction.
+
+What remains untested is everything from the raise
+onward, which is where the cross-boundary canary belongs
+(and where the paper now carries the caution). Decision
+of record, 2026-11-18: bank Boots A and B, build the
+canary next; no manual raise probe ahead of it.
