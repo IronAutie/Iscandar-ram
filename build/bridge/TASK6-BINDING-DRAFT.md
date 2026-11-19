@@ -440,3 +440,19 @@ The channel ends exactly where the arena span begins, and
 load's peak (56,535 pages granted) and the arena's top, so
 no grant of the recorded load can reach the channel's
 pages, which lie outside the arena span in any case.
+
+## Correction, 2026-11-18 late evening
+
+The channel address given in this draft, 0x1FFE0000, is
+an arithmetic error: 0x1FFE0000 + 512 KiB = 0x20060000,
+not 0x20000000. The channel as booted overran the arena
+base by 96 pages, aliasing the arena's first 96 pages
+(response ring and prefix log over cube 0's fixtures,
+registry, and first grantable pages). The sentence "The
+channel ends exactly where the arena span begins" is
+true only of the corrected address, 0x1FF80000, which is
+the boot line of record from 2026-11-18 late evening on.
+Found by re-deriving the spans while designing the
+canary's negative boot; full account in
+build/BENCH-RUN-SHEET.md, findings of 2026-11-18 late
+evening. No other figure in this draft changes.

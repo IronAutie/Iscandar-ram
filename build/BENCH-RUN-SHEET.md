@@ -121,8 +121,12 @@ Then Task 8.
 Drafted 2026-11-17 in build/bridge/TASK6-BINDING-DRAFT.md.
 Decision 1 RULED the same day: (B), the guest goes to
 -m 1024 and the arena span is the second 512 MiB at phys
-0x20000000, channel 512 KiB at 0x1FFE0000; every settled
-figure stands; efficiency deferred by Andrew's word.
+0x20000000, channel 512 KiB at 0x1FF80000 (corrected
+2026-11-18 late: the draft's 0x1FFE0000 was an arithmetic
+error, the channel overran the arena base by 96 pages;
+see the findings section at the end of this sheet);
+every settled figure stands; efficiency deferred by
+Andrew's word.
 Open point RULED the same day: measure the violations
 first, fix next round from the count.
 
@@ -324,3 +328,180 @@ FAIL in the journal, no raise, no exerciser, and a
 living login; then the true boot, expecting `canary:
 PASS` in the proc read, the raise, the exerciser, and
 the finish, which is the evidence run.
+
+## Bench findings, 2026-11-18 late evening (Boot N and Boot C)
+
+### The channel address was wrong (found at the blackboard)
+
+Designing the canary's negative boot forced a re-derivation
+of the spans. The Task 6 draft's channel address,
+0x1FFE0000, does not end where the arena begins:
+0x1FFE0000 + 512 KiB = 0x20060000, which is 96 pages past
+the arena base 0x20000000. The draft subtracted 128 KiB
+for a 512 KiB channel. Every boot through 2026-11-18
+evening ran with the channel's top 96 pages aliasing the
+arena's first 96 pages: the response ring and the prefix
+log shared pages with cube 0's ledger, maps, registry,
+and first grantable pages, and the layer's attach-time
+ring zeroing wrote through the alias onto arena pages
+0 to 32 after its own raise had built them. Latent in
+prefix posture (nothing served), fatal at first traffic.
+The corrected address is 0x1FF80000, the true top of the
+low half, ending exactly at the arena base as designed.
+Boot line of record from here on:
+iscandar_channel=0x1FF80000 iscandar_arena=0x20000000.
+No code changes; the address lives only on the append
+line. The Task 6 draft carries a correction note.
+
+The canary's D3 negative boot was redesigned the same
+evening: both sides take every span from the same boot
+parameters through the kernel's variables, so a wrong
+arena parameter moves both beliefs together and the
+canary would pass on a wrong span. The bench negative
+became the by-hand refusal (below).
+
+### Boot N (negative, all six units masked, corrected spans)
+
+Fast login. Bridge read: state prefix, arena self-check
+PASS, canary: not run, counters counting. The by-hand
+write `echo canary > /proc/iscandar_bridge` was refused
+with EIO, and the next read showed `canary: FAIL`, with
+userspace alive and the counters still climbing. The
+witness refuses on the kernel's side; the layer's side
+was already covered by the self-test's simulated silence
+and wrong answer. Banked.
+
+### Boot C (the true boot, image elbe-build-20261118-2057)
+
+The chain ran: payload installed, layer raised (131072
+pages, fixtures 84, net served 130988) and serving,
+**canary PASS** in the journal. The guest then collapsed
+in a starvation cascade: socket and kzalloc failures,
+NULL dereferences in create_empty_buffers killing dd
+(the finish unit's early harvest) and systemd-journald,
+and bridge timeouts repeating. First reading (from the
+console alone) blamed an unanswered first registration;
+the forensic boot below corrected that: the bridge had
+in fact been serving. QEMU was exited from the monitor
+at Andrew's hand; the image is intact and was mounted
+read-only (noload) on telesart for the journal, which
+held only the synced head of the boot.
+
+Two unit-web defects, independent of the timeout:
+systemd found an ordering cycle (finish against
+exerciser against multi-user.target) and deleted the
+exerciser's start job, so the exerciser never ran; and
+the finish unit, pulled in by the target itself, started
+alongside the layer instead of after the exerciser. Both
+trace to the 2026-11-18 decision to leave finish ungated.
+
+OPEN, not settled: why the first registration went
+unanswered. The layer was in its serve loop half a
+second before and left no crash line. Decisive test,
+parked for Andrew's go: an interactive boot in the
+layer-only posture at the corrected address, canary by
+hand, then `echo raise` by hand, reading req_tail,
+resp_tail, and requests_served from the monitor to learn
+which side of the counter failed.
+
+Fix round, to be designed after the forensics:
+confirm-then-commit registration (no cache marked, no
+ready state, until the layer answers; a timed-out bridge
+degrades to stock, never to NULL); the unit web rebuilt
+so the exerciser cannot be deleted by a cycle and the
+finish is pulled by the exerciser, not the target; and
+a link-check assertion on the span arithmetic itself,
+channel base + channel bytes == arena base, so this
+class of error is caught by the entry check forever.
+
+### Forensic boot, 2026-11-18 ~21:37 (layer-only posture)
+
+Same image, corrected spans, canary/raise/exerciser/
+finish masked. Layer serving (state S, hrtimer_nanosleep,
+its poll posture), baseline bridge read clean, canary by
+hand PASS. The raise was then written by hand and the
+guest collapsed as in Boot C. From the QEMU monitor, the
+control block at 0x1FF80000 read: magic and version
+standing, arena base the layer's mapping, req_head 32,
+req_tail 33, resp_tail 32, requests_served 32, refusals
+and invariant violations 0, prefix counters matching the
+shell read. Request record 33 in the ring: op 4 (cache
+create), object size 624, align 8, flags 0x40100, cookie
+the cache's kernel pointer.
+
+Findings: the bridge served 32 registrations cleanly.
+Call 33, a plain registration indistinguishable from the
+32 before it, was published and never answered;
+requests_served froze at 32 with the serve condition
+standing true in the shared block. The layer process
+then quit (ps found no iscandar-layer): it died after
+completing serve 32 and before serving 33. Serve 33's
+own work is registry arithmetic on pages the raise had
+already touched, with no I/O in the serve path, so the
+layer's death is not explained by its serving code; the
+guest's own log on the image (a segfault line or an
+OOM-kill line) names the killer, recoverable by
+replaying the filesystem journal on a copy of the
+image. That read was attempted the same night: the
+journal on the replayed copy persisted only to
+21:37:12, the layer's first breath; everything after
+the raise never reached disk, because in the cascade
+journald is itself a casualty and cannot write its own
+witness statement. The coredump store is empty. The
+killer therefore stays unnamed by the corpse; the way
+to name it is a fix-round re-run with the layer in the
+foreground on the console, where a segfault or an OOM
+kill prints live instead of depending on the journal.
+The fixes do not depend on the name: confirm-then-
+commit registration and degrade-to-stock stand either
+way.
+
+The starvation cascade's mechanism stands as first
+read, with the trigger corrected: with the bridge ready
+and 32 caches registered, the layer's death left every
+bridged allocation timing out at five seconds and
+returning NULL to kernel paths that cannot survive
+NULL. Two fix-round requirements follow: registration
+must be confirm-then-commit, and the bridge must
+degrade to stock when the layer dies, never to NULL:
+a dead counter must close the shop, not poison it.
+
+### The evening's lesson and the order of work (Andrew, 22:01-22:03)
+
+The failure is documented here so it can be returned
+to, in Andrew's words: "I dont think we should skip
+any steps. We document our failures to, so we can get
+back to them." The lesson, as he stated it: kernel
+processes may not call userland handlers (his Solaris
+form: kernel processes may never sleep; if they do,
+they crash). The userland experiments were good for
+design and have reached their limitations; Iscandar
+goes back into the kernel, then is instrumented
+thoroughly. Order of work: no steps skipped. The
+bridge fix round runs first (confirm-then-commit
+registration, degrade-to-stock on layer death, the
+unit web rebuilt, the span-arithmetic link assertion,
+and the foreground re-run that names the layer's
+killer), and the in-kernel build follows on the basis
+agreed at the blackboard: conditional compilation at
+the platform seams only, one engine text byte-for-byte
+in both builds, the same admission vectors replayed
+against both.
+
+### Fix round built, 2026-11-18 late evening
+
+Ruled as drafted (Task 8, build/bridge/
+TASK8-FIXROUND-DRAFT.md) and built the same night.
+Patch 0008-fix-round.patch carries D1 and D2 (core
+551 to 638 lines), verified by fresh application on a
+reconstructed post-0007 core, byte-identical. The unit
+web (D3) is edited in the finish unit, the exerciser's
+file of record, and the ELBE XML, including the
+wants-symlink farm, which proved to be the finish
+unit's real pull-in to the target. Link-check carries
+the D3 asserts inside boot-order and the span identity
+as its twelfth check, and stands 12/12 here. Not yet
+compiled or benched; the bench round runs D0 first
+(the capturing launch, the foreground layer, the dmesg
+read), then the negative, the true boot, and the
+degrade proof. Uncommitted, awaiting Andrew's word.
