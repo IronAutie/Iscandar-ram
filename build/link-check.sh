@@ -25,7 +25,12 @@
 #                    in NOT-PATCHED.md
 #   boot-order       the units order payload, layer, canary,
 #                    raise, exerciser, finish as the design
-#                    requires
+#                    requires, and the finish unit is pulled
+#                    in by the exerciser alone, never by the
+#                    target (Task 8, D3)
+#   span-identity    the boot line of record satisfies
+#                    channel base + channel bytes == arena
+#                    base (Task 8, D4)
 set -u
 cd "$(dirname "$0")"
 BUILDD=$(pwd)
@@ -213,7 +218,28 @@ grep -q "Before=iscandar-exerciser.service" units/iscandar-raise.service || BO="
 grep -q "After=iscandar-exerciser.service" units/iscandar-finish.service || BO="finish not After the exerciser"
 grep -q "Requires=iscandar-raise.service" ../exerciser/iscandar-exerciser.service || BO="exerciser does not Require the raise"
 grep -q "After=iscandar-raise.service" ../exerciser/iscandar-exerciser.service || BO="exerciser not After the raise"
+grep -q "Wants=iscandar-finish.service" ../exerciser/iscandar-exerciser.service || BO="exerciser does not Want the finish unit (Task 8, D3)"
+grep -q "WantedBy" units/iscandar-finish.service && BO="finish unit is wanted by a target (Task 8, D3)"
+grep -q "ln -sf ../iscandar-finish" elbe/fubuki-iscandar.xml && BO="the XML wants-farm links the finish unit into the target (Task 8, D3)"
 if [ "$BO" = ok ]; then pass boot-order; else fail boot-order "$BO"; fi
+
+# --- span-identity -----------------------------------------
+# The boot line of record lives in BENCH-RUN-SHEET.md; the
+# channel size comes from the generated constants. The
+# identity channel base + channel bytes == arena base is
+# what the 2026-11-18 channel error (a 96-page overlap)
+# violated; assert it where the boot line lives (Task 8, D4).
+SI=ok
+BOOTLINE=$(grep -o "iscandar_channel=0x[0-9A-Fa-f]* iscandar_arena=0x[0-9A-Fa-f]*" BENCH-RUN-SHEET.md | head -1)
+CHAN=$(printf '%s' "$BOOTLINE" | sed -n 's/.*iscandar_channel=\(0x[0-9A-Fa-f]*\).*/\1/p')
+ARENA=$(printf '%s' "$BOOTLINE" | sed -n 's/.*iscandar_arena=\(0x[0-9A-Fa-f]*\).*/\1/p')
+CBYTES=$(grep "^ISCANDAR_CHANNEL_BYTES=" constants/iscandar-build.conf | cut -d= -f2)
+if [ -z "$CHAN" ] || [ -z "$ARENA" ] || [ -z "$CBYTES" ]; then
+  SI="boot line or channel size not found"
+elif [ $((CHAN + CBYTES)) -ne $((ARENA)) ]; then
+  SI="channel $CHAN + $CBYTES bytes != arena $ARENA"
+fi
+if [ "$SI" = ok ]; then pass span-identity; else fail span-identity "$SI"; fi
 
 if [ $FAILS -eq 0 ]; then
   echo "LINK-CHECK: all checks PASS"

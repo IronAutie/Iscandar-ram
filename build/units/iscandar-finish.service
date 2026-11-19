@@ -9,6 +9,3 @@ ExecStart=/bin/systemctl poweroff
 StandardOutput=journal+console
 StandardError=journal+console
 TimeoutStartSec=0
-
-[Install]
-WantedBy=multi-user.target

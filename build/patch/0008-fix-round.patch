@@ -1,0 +1,207 @@
+From: Iscandar-ram build (Paper 3, Task 8 fix round)
+Subject: [PATCH 0008] bridge core: confirm-then-commit raise, dead man's switch
+
+Applies on top of 0007's core as it stands in the tree
+(mm/iscandar_bridge.c, 551 lines). Implements the Task 8
+fix round of build/bridge/TASK8-FIXROUND-DRAFT.md, as
+ruled 2026-11-18 (no steps skipped; the failure
+documented in BENCH-RUN-SHEET.md, bench findings of
+2026-11-18 late evening: 32 registrations served, the
+layer dead after serve 32, ready standing over a dead
+channel, the system starved on NULL):
+
+D1, the raise: a raise window (iscandar_raising) admits
+registration calls while the doors, gated on ready,
+stay shut. The first registration failure aborts the
+enumeration and unrolls it locally; ready is written
+only after the whole list has registered. A failed
+raise leaves prefix posture untouched.
+
+D2, layer death: three consecutive bridge timeouts
+close the bridge (iscandar_closed): ready falls, the
+doors serve stock, and later calls refuse at once
+instead of stalling five seconds each. An arena free
+that reaches a closed or timed-out bridge is leaked
+and counted (the doors never hand an arena pointer to
+the stock free); the count stands in the bridge read
+beside the timeouts, and the state line reports
+"closed". A later raise clears the closure and tries
+again. The unregister's destroy crosses only while
+ready stands; in a rollback or after closure it is
+local only.
+
+The shared header, the control block, the canary, and
+the engine text are untouched. The unit-web half of
+the round (D3) and the span-identity link check (D4)
+live in the unit files, the ELBE XML, and
+link-check.sh, not in this patch.
+
+--- a/mm/iscandar_bridge.c
++++ b/mm/iscandar_bridge.c
+@@ -32,6 +32,18 @@
+ static struct IscandarBridgeRecord *iscandar_resp_ring;
+ static DEFINE_MUTEX(iscandar_call_lock);
+ static bool iscandar_ready;
++/* Task 8 (the fix round, 2026-11-18): the raise window,
++ * the dead-layer trip, and the leaked-free count. Raising
++ * admits bridge calls for registrations while the doors
++ * stay shut; ready stands only after a full enumeration.
++ * Closed is the dead man's switch: once it stands, the
++ * core stops talking to the layer, the doors serve stock,
++ * and arena frees are leaked and counted, never handed
++ * to the stock free path. */
++static bool iscandar_raising;
++static bool iscandar_closed;
++static unsigned int iscandar_consec_timeouts;
++static u64 iscandar_leaked_frees;
+ 
+ atomic64_t iscandar_slab_page_calls = ATOMIC64_INIT(0);
+ 
+@@ -167,7 +179,20 @@
+ 	int waited = 0;
+ 	u64 t0 = ktime_get_ns();
+ 
+-	if (!iscandar_ready || !iscandar_ctrl)
++	if (!iscandar_ctrl)
++		return -ENODEV;
++	if (READ_ONCE(iscandar_closed)) {
++		/* The bridge is closed (Task 8, D2): refuse at
++		 * once, with no five-second stall. A free that
++		 * arrives here is leaked by its door, which
++		 * never hands an arena pointer to the stock
++		 * free; count it so the leak is a number in
++		 * the bridge read, not a suspicion. */
++		if (rec->op == ISCANDAR_OP_FREE)
++			iscandar_leaked_frees++;
++		return -ENODEV;
++	}
++	if (!READ_ONCE(iscandar_ready) && !READ_ONCE(iscandar_raising))
+ 		return -ENODEV;
+ 	mutex_lock(&iscandar_call_lock);
+ 	tail = iscandar_ctrl->req_tail;
+@@ -177,6 +202,26 @@
+ 	while (iscandar_ctrl->resp_tail == tail) {
+ 		if (++waited > 5000) {	/* 5 s at 1 ms polls */
+ 			iscandar_timeouts++;
++			if (rec->op == ISCANDAR_OP_FREE)
++				iscandar_leaked_frees++;
++			/* The dead man's switch (Task 8, D2):
++			 * three consecutive unanswered calls
++			 * close the bridge. Ready falls, so the
++			 * doors serve stock from here; the
++			 * registry stands but is inert, and
++			 * arena frees take the closed fast path
++			 * above. Flags only, under no new lock:
++			 * the lock order against slab_mutex is
++			 * never inverted. */
++			if (++iscandar_consec_timeouts >= 3
++			    && !READ_ONCE(iscandar_closed)) {
++				WRITE_ONCE(iscandar_closed, true);
++				WRITE_ONCE(iscandar_ready, false);
++				pr_err("iscandar: bridge closed after "
++				       "%u consecutive timeouts; "
++				       "stock service restored\n",
++				       iscandar_consec_timeouts);
++			}
+ 			mutex_unlock(&iscandar_call_lock);
+ 			pr_err("iscandar: bridge timeout, op %u\n", rec->op);
+ 			return -ETIMEDOUT;
+@@ -186,6 +231,7 @@
+ 	smp_rmb();
+ 	*rec = iscandar_resp_ring[tail % ISCANDAR_RING_RECORDS];
+ 	iscandar_lat_note(t0);
++	iscandar_consec_timeouts = 0;
+ 	mutex_unlock(&iscandar_call_lock);
+ 	return 0;
+ }
+@@ -237,7 +283,14 @@
+ 
+ 	rec.op = ISCANDAR_OP_CACHE_DESTROY;
+ 	rec.cache_id = iscandar_cache_lookup(s);
+-	if (rec.cache_id
++	/* The destroy crosses only while the bridge stands
++	 * (Task 8, D1): in a raise rollback, or after the
++	 * dead man's switch has closed the bridge, the
++	 * unregister is local only. Nothing was granted
++	 * under a raise window, and the layer re-zeroes
++	 * its own registry at its next raise, so no
++	 * verdict is owed in either case. */
++	if (rec.cache_id && READ_ONCE(iscandar_ready)
+ 	    && (iscandar_bridge_call(&rec)
+ 		|| rec.status != ISCANDAR_BRIDGE_OK))
+ 		pr_err("iscandar: cache %p destroy verdict %u\n",
+@@ -386,21 +439,52 @@
+ 	if (iscandar_ctrl->magic != ISCANDAR_CHANNEL_MAGIC
+ 	    || iscandar_ctrl->version != ISCANDAR_CHANNEL_VERSION)
+ 		return -EPROTO;
+-	WRITE_ONCE(iscandar_ready, true);
++	/* A fresh attempt (Task 8, D1/D2): a bridge closed
++	 * by the dead man's switch may be raised again once
++	 * the layer stands again. */
++	WRITE_ONCE(iscandar_closed, false);
++	iscandar_consec_timeouts = 0;
++	/* Confirm, then commit: the enumeration runs inside
++	 * the raise window, which admits registration calls
++	 * at the bridge while the doors, gated on ready,
++	 * stay shut. Ready is written only after the whole
++	 * list has registered. The first failure aborts the
++	 * pass and unrolls it: at raise entry the kernel
++	 * registry is empty (a completed raise holds ready,
++	 * a failed one unrolls, and nothing else registers),
++	 * so every entry the rollback walk finds is this
++	 * pass's own. The unroll's unregisters are local
++	 * only, ready being down; nothing was ever granted
++	 * under the window, so nothing is stranded. */
++	WRITE_ONCE(iscandar_raising, true);
+ 	mutex_lock(&slab_mutex);
+ 	list_for_each_entry(s, &slab_caches, list) {
+ 		if (iscandar_cache_lookup(s))
+ 			continue;
+ 		if (iscandar_cache_register(s, s->object_size,
+-					    s->align, s->flags))
++					    s->align, s->flags)) {
+ 			failed++;
+-		else
+-			registered++;
++			break;
++		}
++		registered++;
++	}
++	if (failed) {
++		list_for_each_entry(s, &slab_caches, list)
++			if (iscandar_cache_lookup(s))
++				iscandar_cache_unregister(s);
+ 	}
+ 	mutex_unlock(&slab_mutex);
++	WRITE_ONCE(iscandar_raising, false);
++	if (failed) {
++		pr_err("iscandar: raise: registration failed after "
++		       "%d caches; rolled back, bridge stays down\n",
++		       registered);
++		return -ENOSPC;
++	}
++	WRITE_ONCE(iscandar_ready, true);
+ 	pr_info("iscandar: raise: %d caches registered, %d failed\n",
+ 		registered, failed);
+-	return failed ? -ENOSPC : 0;
++	return 0;
+ }
+ 
+ static ssize_t iscandar_bridge_write(struct file *file,
+@@ -434,6 +518,7 @@
+ 	int i;
+ 
+ 	seq_printf(m, "state %s\n",
++		   iscandar_closed ? "closed" :
+ 		   iscandar_ready ? "ready" : "prefix");
+ 	if (!iscandar_ctrl) {
+ 		seq_puts(m, "binding absent: no channel span\n");
+@@ -455,6 +540,8 @@
+ 		   (long long)atomic64_read(&iscandar_slab_page_calls));
+ 	seq_printf(m, "bridge timeouts: %llu\n",
+ 		   (unsigned long long)iscandar_timeouts);
++	seq_printf(m, "bridge leaked frees: %llu\n",
++		   (unsigned long long)iscandar_leaked_frees);
+ 	if (n) {
+ 		mean = div_u64(iscandar_lat_sum_us, n);
+ 		var = div_u64(iscandar_lat_sumsq_us, n);

@@ -6,8 +6,13 @@ After=iscandar-raise.service multi-user.target
 # an unraised run exports evidence that looks like a raised
 # one (bench finding, 2026-11-17 evening).
 Requires=iscandar-raise.service
-# The evidence rig's finish service (trace export and shutdown)
-# orders itself After=iscandar-exerciser.service.
+# The finish service is pulled in here, by the exerciser
+# alone, and orders itself After=iscandar-exerciser.service.
+# It is deliberately NOT wanted by multi-user.target: that
+# edge closed an ordering cycle (finish, exerciser, target)
+# that deleted the exerciser's start job in Boot C
+# (bench finding, 2026-11-18 evening; Task 8, D3).
+Wants=iscandar-finish.service
 
 [Service]
 Type=oneshot

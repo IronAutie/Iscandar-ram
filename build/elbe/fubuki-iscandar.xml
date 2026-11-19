@@ -385,8 +385,13 @@ After=iscandar-raise.service multi-user.target
 # an unraised run exports evidence that looks like a raised
 # one (bench finding, 2026-11-17 evening).
 Requires=iscandar-raise.service
-# The evidence rig's finish service (trace export and shutdown)
-# orders itself After=iscandar-exerciser.service.
+# The finish service is pulled in here, by the exerciser
+# alone, and orders itself After=iscandar-exerciser.service.
+# It is deliberately NOT wanted by multi-user.target: that
+# edge closed an ordering cycle (finish, exerciser, target)
+# that deleted the exerciser's start job in Boot C
+# (bench finding, 2026-11-18 evening; Task 8, D3).
+Wants=iscandar-finish.service
 
 [Service]
 Type=oneshot
@@ -455,11 +460,8 @@ ExecStart=/bin/systemctl poweroff
 StandardOutput=journal+console
 StandardError=journal+console
 TimeoutStartSec=0
-
-[Install]
-WantedBy=multi-user.target
 </file>
-			<command>mkdir -p /etc/systemd/system/multi-user.target.wants &amp;&amp; cd /etc/systemd/system/multi-user.target.wants &amp;&amp; ln -sf ../iscandar-payload.service . &amp;&amp; ln -sf ../iscandar-layer.service . &amp;&amp; ln -sf ../iscandar-canary.service . &amp;&amp; ln -sf ../iscandar-raise.service . &amp;&amp; ln -sf ../iscandar-exerciser.service . &amp;&amp; ln -sf ../iscandar-finish.service .</command>
+			<command>mkdir -p /etc/systemd/system/multi-user.target.wants &amp;&amp; cd /etc/systemd/system/multi-user.target.wants &amp;&amp; ln -sf ../iscandar-payload.service . &amp;&amp; ln -sf ../iscandar-layer.service . &amp;&amp; ln -sf ../iscandar-canary.service . &amp;&amp; ln -sf ../iscandar-raise.service . &amp;&amp; ln -sf ../iscandar-exerciser.service .</command>
 		</finetuning>
 	</target>
 </ns0:RootFileSystem>
