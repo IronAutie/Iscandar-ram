@@ -264,6 +264,7 @@ WantedBy=multi-user.target
 				build/units/iscandar-payload-install
 				build/units/iscandar-payload.service
 				build/units/iscandar-layer.service
+				build/units/iscandar-canary.service
 				build/units/iscandar-raise.service
 				build/units/iscandar-finish
 				build/units/iscandar-finish.service
@@ -346,9 +347,25 @@ Restart=no
 [Install]
 WantedBy=multi-user.target
 </file>
+			<file dst="/etc/systemd/system/iscandar-canary.service">[Unit]
+Description=Cross-boundary canary: layer and kernel witness the same arena (Paper 3, Task 7)
+After=iscandar-layer.service
+Before=iscandar-raise.service
+ConditionPathExists=/usr/local/sbin/iscandar-layer
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/iscandar-layer --canary
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target
+</file>
 			<file dst="/etc/systemd/system/iscandar-raise.service">[Unit]
 Description=Open the kernel bridge to the raised layer
-After=iscandar-layer.service
+Requires=iscandar-canary.service
+After=iscandar-layer.service iscandar-canary.service
 Before=iscandar-exerciser.service
 
 [Service]
@@ -442,7 +459,7 @@ TimeoutStartSec=0
 [Install]
 WantedBy=multi-user.target
 </file>
-			<command>mkdir -p /etc/systemd/system/multi-user.target.wants &amp;&amp; cd /etc/systemd/system/multi-user.target.wants &amp;&amp; ln -sf ../iscandar-payload.service . &amp;&amp; ln -sf ../iscandar-layer.service . &amp;&amp; ln -sf ../iscandar-raise.service . &amp;&amp; ln -sf ../iscandar-exerciser.service . &amp;&amp; ln -sf ../iscandar-finish.service .</command>
+			<command>mkdir -p /etc/systemd/system/multi-user.target.wants &amp;&amp; cd /etc/systemd/system/multi-user.target.wants &amp;&amp; ln -sf ../iscandar-payload.service . &amp;&amp; ln -sf ../iscandar-layer.service . &amp;&amp; ln -sf ../iscandar-canary.service . &amp;&amp; ln -sf ../iscandar-raise.service . &amp;&amp; ln -sf ../iscandar-exerciser.service . &amp;&amp; ln -sf ../iscandar-finish.service .</command>
 		</finetuning>
 	</target>
 </ns0:RootFileSystem>

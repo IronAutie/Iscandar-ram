@@ -1,6 +1,7 @@
 [Unit]
 Description=Open the kernel bridge to the raised layer
-After=iscandar-layer.service
+Requires=iscandar-canary.service
+After=iscandar-layer.service iscandar-canary.service
 Before=iscandar-exerciser.service
 
 [Service]

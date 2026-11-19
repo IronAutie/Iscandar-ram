@@ -1,0 +1,14 @@
+[Unit]
+Description=Cross-boundary canary: layer and kernel witness the same arena (Paper 3, Task 7)
+After=iscandar-layer.service
+Before=iscandar-raise.service
+ConditionPathExists=/usr/local/sbin/iscandar-layer
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/iscandar-layer --canary
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target

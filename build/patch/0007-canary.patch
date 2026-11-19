@@ -1,0 +1,101 @@
+From: Iscandar-ram build (Paper 3, Task 7 canary)
+Subject: [PATCH 0007] bridge core: the cross-boundary canary
+
+Applies on top of 0006's core as it stands in the tree
+(mm/iscandar_bridge.c, 505 lines). Implements the Task 7
+canary of build/bridge/TASK7-CANARY-DRAFT.md, as ruled
+2026-11-18 (D2: the kernel surface is a proc verb; the
+control block is untouched):
+
+- A "canary" write verb on /proc/iscandar_bridge. The
+  layer has written ISCANDAR_CANARY_FROM_LAYER at word 0
+  of the arena's fixture page (offset
+  ISCANDAR_CANARY_OFFSET) through its own arena mapping;
+  the kernel reads the word through the offset's kernel
+  pointer and, on a match, writes
+  ISCANDAR_CANARY_FROM_KERNEL at word 1 for the layer to
+  read back through its own mapping. A mismatch returns
+  -EIO. Unlike the arena self-check, which the kernel
+  proves alone and so shares the kernel's premise, the
+  canary's witness stands on the other side of the
+  boundary.
+- The result is recorded (0 PASS, -EIO FAIL, -ENODEV
+  not run) and reported on the proc read as "canary:
+  PASS", "canary: FAIL", or "canary: not run", after
+  the arena self-check line.
+
+The bench must also refresh the tree's copy of the
+shared header (include/iscandar_bridge.h) from
+build/bridge/iscandar_bridge.h, which carries the two
+canary pattern constants; never retype a constant.
+
+---
+--- a/mm/iscandar_bridge.c
++++ b/mm/iscandar_bridge.c
+@@ -321,6 +321,47 @@
+ 	return 0;
+ }
+ 
++static int iscandar_canary_rc = -ENODEV;
++
++/* The cross-boundary canary (Task 7): the self-check
++ * above is proven by the kernel alone, so it shares the
++ * kernel's premise about the arena. The canary is the
++ * witness that does not share it. The layer writes
++ * ISCANDAR_CANARY_FROM_LAYER at word 0 of the fixture
++ * page (offset ISCANDAR_CANARY_OFFSET) through its own
++ * arena mapping, then writes "canary" here. The kernel
++ * reads the word through the offset's kernel pointer:
++ * agreement means the layer's mapping and the kernel's
++ * name the same physical memory. On agreement the kernel
++ * writes ISCANDAR_CANARY_FROM_KERNEL at word 1, which
++ * the layer reads back through its own mapping, so both
++ * directions are witnessed before any raise. The result
++ * is recorded for the proc read: 0 is PASS, -EIO is
++ * FAIL, -ENODEV is not run (no arena bound, or the verb
++ * not yet written). */
++static int iscandar_canary(void)
++{
++	volatile u32 *words;
++
++	if (!iscandar_arena_base) {
++		iscandar_canary_rc = -ENODEV;
++		return -ENODEV;
++	}
++	words = iscandar_offset_to_ptr(ISCANDAR_CANARY_OFFSET);
++	if (!words) {
++		iscandar_canary_rc = -ENODEV;
++		return -ENODEV;
++	}
++	if (words[0] != ISCANDAR_CANARY_FROM_LAYER) {
++		iscandar_canary_rc = -EIO;
++		return -EIO;
++	}
++	words[1] = ISCANDAR_CANARY_FROM_KERNEL;
++	smp_wmb();
++	iscandar_canary_rc = 0;
++	return 0;
++}
++
+ /* The raise: the layer's control block must carry the
+  * magic and the version; then the bridge opens, and the
+  * caches born during the prefix are registered by
+@@ -373,6 +414,8 @@
+ 	if (copy_from_user(word, buf, count))
+ 		return -EFAULT;
+ 	word[count] = '\0';
++	if (strncmp(word, "canary", 6) == 0)
++		return iscandar_canary() ?: (ssize_t)count;
+ 	if (strncmp(word, "raise", 5) == 0)
+ 		return iscandar_raise() ?: (ssize_t)count;
+ 	if (strncmp(word, "stop", 4) == 0) {
+@@ -398,6 +441,9 @@
+ 	}
+ 	seq_printf(m, "arena self-check: %s\n",
+ 		   iscandar_selfcheck_rc == 0 ? "PASS" : "FAIL");
++	seq_printf(m, "canary: %s\n",
++		   iscandar_canary_rc == 0 ? "PASS" :
++		   iscandar_canary_rc == -ENODEV ? "not run" : "FAIL");
+ 	seq_printf(m, "prefix log written %u, overflow %u\n",
+ 		   iscandar_ctrl->prefix_log_written,
+ 		   iscandar_ctrl->prefix_overflow);

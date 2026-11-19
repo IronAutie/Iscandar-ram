@@ -108,6 +108,24 @@
 #define ISCANDAR_CHANNEL_MAGIC          0x49534352u /* "ISCR" */
 #define ISCANDAR_CHANNEL_VERSION        1u
 
+/* The cross-boundary canary (Task 7, ruled 2026-11-18).
+ * Before the raise, the layer writes CANARY_FROM_LAYER at
+ * word 0 of the arena's second page (inside the fixture
+ * region: the words land in the ledger bins for cube 0
+ * pages 2048 and 2049) through its own arena mapping;
+ * the kernel reads that word through the direct map and,
+ * on a match, writes CANARY_FROM_KERNEL at word 1.
+ * Agreement in both directions is the witness that the
+ * two sides' beliefs about the arena name the same
+ * physical memory. Both words are restored to 0 when the
+ * canary is done, success or failure: the words are
+ * ledger bins, so a leftover pattern would read as a
+ * free run. The kernel's self-check restores its pattern
+ * the same way. */
+#define ISCANDAR_CANARY_OFFSET          ISCANDAR_PAGE_BYTES
+#define ISCANDAR_CANARY_FROM_LAYER      0x15CA0001u
+#define ISCANDAR_CANARY_FROM_KERNEL     0x15CA0002u
+
 /* Centers, for the prefix counters and the patch manifest.
  * The numbers are the patch-point list's own. */
 #define ISCANDAR_CENTER_SLAB_ALLOC      11  /* 1.1 slab_alloc_node */

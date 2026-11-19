@@ -38,11 +38,13 @@
  *   retries, or falls back silently.
  *
  * Modes: --self-test runs a recorded-style request sequence
- * in-process and checks the balances; --serve PATH runs the
- * channel loop over a shared channel file at PATH (the rig);
- * --serve-region runs the same loop over the live build's
- * reserved channel region, with the arena raised on the
- * kernel's arena span (Task 6). */
+ * in-process and checks the balances; --canary runs the
+ * cross-boundary canary against the live build and exits
+ * (Task 7); --serve PATH runs the channel loop over a
+ * shared channel file at PATH (the rig); --serve-region
+ * runs the same loop over the live build's reserved
+ * channel region, with the arena raised on the kernel's
+ * arena span (Task 6). */
 
 #define _POSIX_C_SOURCE 200809L
 
@@ -685,6 +687,91 @@ static void st_free(Layer *L, LiveBlock *live, int *nlive,
     }
 }
 
+/* The cross-boundary canary, the layer's half (Task 7).
+ * The layer writes ISCANDAR_CANARY_FROM_LAYER at word 0
+ * of the fixture page at ISCANDAR_CANARY_OFFSET through
+ * its arena mapping, then writes "canary" to
+ * /proc/iscandar_bridge; the kernel answers with
+ * ISCANDAR_CANARY_FROM_KERNEL at word 1, which the poll
+ * waits for. The words land in ledger bins for cube 0
+ * pages 2048 and 2049, so both words are restored to 0
+ * before the run returns, success or failure: the same
+ * scribble-then-restore discipline as the kernel's arena
+ * self-check. The two halves are separate functions so
+ * the self-test can stand a simulated kernel in the
+ * kernel's place. */
+static void canary_write(volatile uint32_t *page)
+{
+    page[1] = 0;
+    __sync_synchronize();
+    page[0] = ISCANDAR_CANARY_FROM_LAYER;
+    __sync_synchronize();
+}
+
+static int canary_poll(volatile uint32_t *page, int tries)
+{
+    struct timespec ts;
+    int i;
+
+    ts.tv_sec = 0;
+    ts.tv_nsec = 1000000L;
+    for (i = 0; i < tries; i++) {
+        if (page[1] == ISCANDAR_CANARY_FROM_KERNEL)
+            return 0;
+        if (page[1] != 0)
+            return -1; /* a wrong answer is final */
+        nanosleep(&ts, NULL);
+    }
+    return -1;
+}
+
+static int canary_region(void)
+{
+    int fd, pfd, rc;
+    unsigned char *arena;
+    volatile uint32_t *page;
+
+    fd = open("/dev/iscandar", O_RDWR);
+    if (fd < 0)
+        return 1;
+    arena = mmap(NULL, ISCANDAR_ARENA_BYTES, PROT_READ | PROT_WRITE,
+                 MAP_SHARED, fd, ISCANDAR_CHANNEL_BYTES);
+    close(fd);
+    if (arena == MAP_FAILED)
+        return 1;
+    page = (volatile uint32_t *)(void *)(arena
+                                         + ISCANDAR_CANARY_OFFSET);
+    canary_write(page);
+    pfd = open("/proc/iscandar_bridge", O_WRONLY);
+    if (pfd < 0) {
+        fprintf(stderr, "iscandar-layer: canary: no bridge proc\n");
+        page[0] = 0;
+        page[1] = 0;
+        munmap(arena, ISCANDAR_ARENA_BYTES);
+        return 1;
+    }
+    rc = write(pfd, "canary", 6);
+    close(pfd);
+    if (rc != 6) {
+        fprintf(stderr, "iscandar-layer: canary: kernel refused\n");
+        page[0] = 0;
+        page[1] = 0;
+        munmap(arena, ISCANDAR_ARENA_BYTES);
+        return 1;
+    }
+    rc = canary_poll(page, 10000);
+    page[0] = 0;
+    page[1] = 0;
+    __sync_synchronize();
+    munmap(arena, ISCANDAR_ARENA_BYTES);
+    if (rc != 0) {
+        fprintf(stderr, "iscandar-layer: canary: no answer\n");
+        return 1;
+    }
+    printf("iscandar-layer: canary PASS\n");
+    return 0;
+}
+
 static int self_test(void)
 {
     Layer L;
@@ -833,6 +920,33 @@ static int self_test(void)
         nlive--;
     }
     st_check(nlive == 0, "drain incomplete");
+
+    /* The canary, in simulation (Task 7): a responder that
+     * answers as the kernel would passes; one that never
+     * answers fails on the poll; one that answers wrongly
+     * fails at once. Both words are restored to 0 inside
+     * the block, so the ledger is as the drains left
+     * it. */
+    {
+        volatile uint32_t *page = (volatile uint32_t *)(void *)
+            (L.arena + ISCANDAR_CANARY_OFFSET);
+        canary_write(page);
+        st_check(page[0] == ISCANDAR_CANARY_FROM_LAYER,
+                 "canary pattern not written");
+        st_check(page[1] == 0, "canary answer not cleared");
+        page[1] = ISCANDAR_CANARY_FROM_KERNEL;
+        st_check(canary_poll(page, 100) == 0,
+                 "canary pass not seen");
+        canary_write(page);
+        st_check(canary_poll(page, 5) != 0,
+                 "canary silence not refused");
+        canary_write(page);
+        page[1] = 0xDEADBEEFu;
+        st_check(canary_poll(page, 100) != 0,
+                 "canary wrong answer not refused");
+        page[0] = 0;
+        page[1] = 0;
+    }
 
     /* The balances. */
     st_check(L.beam->count_overall
@@ -1032,6 +1146,9 @@ int main(int argc, char **argv)
     if (argc >= 2 && strcmp(argv[1], "--self-test") == 0) {
         return self_test();
     }
+    if (argc >= 2 && strcmp(argv[1], "--canary") == 0) {
+        return canary_region();
+    }
     if (argc >= 3 && strcmp(argv[1], "--serve") == 0) {
         rc = layer_raise(&L);
         if (rc != ISCANDAR_BRIDGE_OK) {
@@ -1079,7 +1196,8 @@ int main(int argc, char **argv)
         layer_lower(&L);
         return rc == ISCANDAR_BRIDGE_OK ? 0 : 1;
     }
-    fprintf(stderr, "usage: %s --self-test | --serve CHANNEL-FILE "
+    fprintf(stderr, "usage: %s --self-test | --canary "
+                    "| --serve CHANNEL-FILE "
                     "| --serve-region\n", argv[0]);
     return 2;
 }

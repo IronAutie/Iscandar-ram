@@ -23,8 +23,9 @@
 #                    reconciliation requires them
 #   not-patched      every named non-served family is listed
 #                    in NOT-PATCHED.md
-#   boot-order       the units order payload, layer, raise,
-#                    exerciser, finish as the design requires
+#   boot-order       the units order payload, layer, canary,
+#                    raise, exerciser, finish as the design
+#                    requires
 set -u
 cd "$(dirname "$0")"
 BUILDD=$(pwd)
@@ -104,6 +105,8 @@ if root is not None:
             "build/units/iscandar-payload.service",
         "/etc/systemd/system/iscandar-layer.service":
             "build/units/iscandar-layer.service",
+        "/etc/systemd/system/iscandar-canary.service":
+            "build/units/iscandar-canary.service",
         "/etc/systemd/system/iscandar-raise.service":
             "build/units/iscandar-raise.service",
         "/etc/systemd/system/iscandar-exerciser.service":
@@ -201,7 +204,11 @@ BO=ok
 grep -q "Before=iscandar-exerciser.service" units/iscandar-layer.service || BO="layer not Before the exerciser"
 grep -q "ConditionPathExists=/usr/local/sbin/iscandar-layer" units/iscandar-layer.service || BO="layer lacks its payload condition"
 grep -q "Before=iscandar-layer.service" units/iscandar-payload.service || BO="payload not Before the layer"
+grep -q "After=iscandar-layer.service" units/iscandar-canary.service || BO="canary not After the layer"
+grep -q "Before=iscandar-raise.service" units/iscandar-canary.service || BO="canary not Before the raise"
+grep -q "Requires=iscandar-canary.service" units/iscandar-raise.service || BO="raise does not Require the canary"
 grep -q "After=iscandar-layer.service" units/iscandar-raise.service || BO="raise not After the layer"
+grep -q "iscandar-canary.service" units/iscandar-raise.service || BO="raise does not order after the canary"
 grep -q "Before=iscandar-exerciser.service" units/iscandar-raise.service || BO="raise not Before the exerciser"
 grep -q "After=iscandar-exerciser.service" units/iscandar-finish.service || BO="finish not After the exerciser"
 grep -q "Requires=iscandar-raise.service" ../exerciser/iscandar-exerciser.service || BO="exerciser does not Require the raise"

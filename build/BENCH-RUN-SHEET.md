@@ -275,3 +275,52 @@ onward, which is where the cross-boundary canary belongs
 (and where the paper now carries the caution). Decision
 of record, 2026-11-18: bank Boots A and B, build the
 canary next; no manual raise probe ahead of it.
+
+## Task 7: the canary, built 2026-11-18 evening
+
+Ruled the same evening, all three as drafted in
+`build/bridge/TASK7-CANARY-DRAFT.md`: D1, a separate
+`iscandar-canary.service` between the layer and the
+raise; D2, a `canary` verb on /proc/iscandar_bridge (the
+control block is untouched); D3, the negative bench boot
+is part of the acceptance round.
+
+Built and checked here, not yet at the bench:
+
+- The shared header carries the two pattern constants
+  (`ISCANDAR_CANARY_FROM_LAYER`, `ISCANDAR_CANARY_FROM_KERNEL`)
+  and the offset, `ISCANDAR_CANARY_OFFSET`.
+- Patch `0007-canary.patch`: the verb, the recorded
+  result, and the `canary:` line in the proc read.
+  Verified as 0006 was: applied on top of the core
+  reconstructed from 0005 and 0006, it reproduces the
+  edited core byte for byte (505 to 551 lines).
+- The layer's `--canary` mode: writes its pattern
+  through its own /dev/iscandar arena mapping, asks the
+  kernel by the verb, polls for the kernel's pattern,
+  and restores both words to 0 before exiting, success
+  or failure. The words are ledger bins for cube 0 pages
+  2048 and 2049, so the restore is part of the protocol,
+  not tidiness. The self-test stands a simulated kernel
+  in the kernel's place: 847 checks, 0 failures (the
+  canary adds 5 to the 842).
+- The raise unit now carries `Requires=iscandar-canary.service`
+  and orders after it; the ELBE XML carries the canary
+  unit's inline body, its manifest line, and its wants
+  symlink. Link-check is 11/11 here with the canary pair
+  inside xml-copies and the canary's ordering asserted
+  inside boot-order.
+
+Next bench round, in order: pull; refresh the tree's
+`include/iscandar_bridge.h` from `build/bridge/iscandar_bridge.h`
+(never retype a constant); apply 0007 to the tree;
+rebuild the kernel with `make -j1`; link-check at the
+bench; rebuild the layer and restage the payload; copy
+the updated XML and rebuild the ELBE image. Then the
+acceptance round: first the negative boot, with a
+deliberately wrong `iscandar_arena=` on the append line
+and everything else as usual, expecting the canary to
+FAIL in the journal, no raise, no exerciser, and a
+living login; then the true boot, expecting `canary:
+PASS` in the proc read, the raise, the exerciser, and
+the finish, which is the evidence run.
