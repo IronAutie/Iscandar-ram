@@ -1,0 +1,55 @@
+From a6835857825e469eb64d19fbfe1122bb8fab7f4f Mon Sep 17 00:00:00 2001
+From: Iscandar build <iscandar@local>
+Date: Fri, 20 Nov 2026 19:25:14 -0800
+Subject: [PATCH] iscandar: cache setup at 1.5 in kernel form; krealloc by
+ composition
+
+---
+ mm/slab_common.c | 17 +++++++++++++++++
+ 1 file changed, 17 insertions(+)
+
+diff --git a/mm/slab_common.c b/mm/slab_common.c
+index 2e32712b6..61ee9e272 100644
+--- a/mm/slab_common.c
++++ b/mm/slab_common.c
+@@ -28,6 +28,7 @@
+ #include <asm/page.h>
+ #include <linux/memcontrol.h>
+ #include <linux/stackdepot.h>
++#include <linux/iscandar.h>
+ 
+ #include "internal.h"
+ #include "slab.h"
+@@ -376,6 +377,20 @@ struct kmem_cache *__kmem_cache_create_args(const char *name,
+ 		}
+ 		return NULL;
+ 	}
++	/* Register before the cache is returned to its
++	 * creator: an unregistered cache must never reach
++	 * 1.1. Registration runs in every state (the
++	 * registry is mass memory beside the doors; there
++	 * is no raise to defer it to). A refusal is the
++	 * cap's verdict: the creation fails, loudly. */
++	if (iscandar_cache_register(s, object_size,
++				    args->align, flags)) {
++		kmem_cache_destroy(s);
++		return NULL;
++	}
++	if (!iscandar_active())
++		iscandar_prefix_note(ISCANDAR_CENTER_CACHE_SETUP,
++				     object_size);
+ 	return s;
+ }
+ EXPORT_SYMBOL(__kmem_cache_create_args);
+@@ -510,6 +525,8 @@ void kmem_cache_destroy(struct kmem_cache *s)
+ 	if (unlikely(!s) || !kasan_check_byte(s))
+ 		return;
+ 
++	iscandar_cache_unregister(s);
++
+ 	/* in-flight kfree_rcu()'s may include objects from our cache */
+ 	kvfree_rcu_barrier();
+ 
+-- 
+2.43.0
+

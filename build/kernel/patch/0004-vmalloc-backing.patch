@@ -1,0 +1,85 @@
+STAGED PATCH 0004 (kernel round) of 5: apply after 0001.
+Target: Linux 6.12.116, mm/vmalloc.c. Line anchors are
+the manifest's numbers of record, checked against the
+pristine tree; context lines are schematic. Re-base
+on the real tree before applying.
+
+Subject: iscandar: vmalloc backing at 2.3, free doors
+at 2.4, in kernel form
+
+The family splits at its own seam, as the bridge
+staging had it: the reservation half (2.2,
+__get_vm_area_node and alloc_vmap_area) stays stock,
+address-space bookkeeping that was never part of the
+replacement, and is not patched. Only the backing is
+replaced: where the stock body fills the area's page
+array page by page from the page allocator, the core
+serves ONE exact-fit run for the whole area, and the
+array is filled with the run's frames in order,
+through the core's own offset-to-page conversion.
+
+One vmalloc contains a hidden slab allocation (the
+page-pointer array, allocated by a recursive vmalloc
+call into Family 1): it arrives at 1.1 as any cache
+allocation does, and the books expect vmalloc traffic
+to touch Family 1 in this way. Unchanged from the
+bridge round.
+
+The bridge staging left one question open at
+vfree_atomic, in its own words: whether the atomic
+door could take the same record "is not pre-decided."
+This build decides it. The core's free path is
+sleep-free inside its irqsave section, so an atomic
+caller is served exactly as a process-context caller
+is (design section 3: atomic-context callers, which
+the bridge refused, are served). vfree_atomic takes
+the same range decision and the same door as vfree.
+
+--- a/mm/vmalloc.c
++++ b/mm/vmalloc.c
+@@ -3594,7 +3594,25 @@
+-static int vm_area_alloc_pages(...)
++static int vm_area_alloc_pages(...)
+ {
++	if (iscandar_active()) {
++		void *run;
++		unsigned int i;
++
++		run = iscandar_alloc((u64)area->nr_pages << PAGE_SHIFT,
++				     PAGE_SIZE, 0);
++		if (!run)
++			return -ENOMEM;
++		for (i = 0; i < area->nr_pages; i++)
++			area->pages[i] = iscandar_offset_to_page(
++				iscandar_ptr_to_offset(run)
++				+ ((u64)i << PAGE_SHIFT));
++		return 0;
++	}
++	iscandar_prefix_note(ISCANDAR_CENTER_VMALLOC_BACKING,
++			     (size_t)area->nr_pages << PAGE_SHIFT);
+ 	...
+ }
+@@ -3407,6 +3425,12 @@
+-void vfree(const void *addr)
++void vfree(const void *addr)
+ {
++	if (iscandar_ptr_in_arena(addr)) {
++		iscandar_free(addr, 0);
++		return;
++	}
+ 	...
+ }
+@@ -3373,4 +3397,14 @@
+-void vfree_atomic(const void *addr)
++void vfree_atomic(const void *addr)
+ {
++	/* The same door as vfree, taken in this build: the
++	 * core's free path does not sleep, so the atomic
++	 * caller's contract is met by the same range
++	 * decision and the same call. */
++	if (iscandar_ptr_in_arena(addr)) {
++		iscandar_free(addr, 0);
++		return;
++	}
+ 	...
+ }

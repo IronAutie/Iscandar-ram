@@ -1,0 +1,262 @@
+From 8eaa15806ebde473262ea24010ba82dd8c384ccd Mon Sep 17 00:00:00 2001
+From: Iscandar build <iscandar@local>
+Date: Fri, 20 Nov 2026 19:25:36 -0800
+Subject: [PATCH] iscandar: the second ring in kernel form (4.2, 4.3), and the
+ alloc_bulk funnel
+
+---
+ lib/genalloc.c | 25 +++++++++++++++
+ mm/percpu.c    | 42 ++++++++++++++++++++++++
+ mm/slub.c      | 86 +++++++++++++++++---------------------------------
+ 3 files changed, 96 insertions(+), 57 deletions(-)
+
+diff --git a/lib/genalloc.c b/lib/genalloc.c
+index 841f29783..e982f4e5e 100644
+--- a/lib/genalloc.c
++++ b/lib/genalloc.c
+@@ -36,6 +36,7 @@
+ #include <linux/of_platform.h>
+ #include <linux/platform_device.h>
+ #include <linux/vmalloc.h>
++#include <linux/iscandar.h>
+ 
+ static inline size_t chunk_size(const struct gen_pool_chunk *chunk)
+ {
+@@ -203,6 +204,12 @@ int gen_pool_add_owner(struct gen_pool *pool, unsigned long virt, phys_addr_t ph
+ 	list_add_rcu(&chunk->next_chunk, &pool->chunks);
+ 	spin_unlock(&pool->lock);
+ 
++	/* The backing rule's gate (coverage audit item 3):
++	 * every add path funnels through this function, so
++	 * this one note sees every chunk, with its physical
++	 * range in hand for the core's RAM test. */
++	iscandar_gen_pool_note_chunk(pool, phys, size);
++
+ 	return 0;
+ }
+ EXPORT_SYMBOL(gen_pool_add_owner);
+@@ -292,6 +299,15 @@ unsigned long gen_pool_alloc_algo_owner(struct gen_pool *pool, size_t size,
+ 	if (size == 0)
+ 		return 0;
+ 
++	if (iscandar_active() && iscandar_gen_pool_served(pool)) {
++		void *p = iscandar_alloc(size, 0, 0);
++
++		if (!p)
++			return 0;
++		return (unsigned long)p;
++	}
++	iscandar_prefix_note(ISCANDAR_CENTER_GENPOOL, size);
++
+ 	nbits = (size + (1UL << order) - 1) >> order;
+ 	rcu_read_lock();
+ 	list_for_each_entry_rcu(chunk, &pool->chunks, next_chunk) {
+@@ -498,6 +514,15 @@ void gen_pool_free_owner(struct gen_pool *pool, unsigned long addr, size_t size,
+ 	if (owner)
+ 		*owner = NULL;
+ 
++	/* The range decision alone, as at every free door:
++	 * an arena-born address goes home whether or not
++	 * its pool still stands served, and the bitmap
++	 * machinery below must never see one. */
++	if (iscandar_ptr_in_arena((const void *)addr)) {
++		iscandar_free((const void *)addr, 0);
++		return;
++	}
++
+ 	nbits = (size + (1UL << order) - 1) >> order;
+ 	rcu_read_lock();
+ 	list_for_each_entry_rcu(chunk, &pool->chunks, next_chunk) {
+diff --git a/mm/percpu.c b/mm/percpu.c
+index 44764720b..fb0f20b87 100644
+--- a/mm/percpu.c
++++ b/mm/percpu.c
+@@ -87,6 +87,7 @@
+ #include <linux/sched.h>
+ #include <linux/sched/mm.h>
+ #include <linux/memcontrol.h>
++#include <linux/iscandar.h>
+ 
+ #include <asm/cacheflush.h>
+ #include <asm/sections.h>
+@@ -1743,6 +1744,37 @@ static void pcpu_alloc_tag_free_hook(struct pcpu_chunk *chunk, int off, size_t s
+ void __percpu *pcpu_alloc_noprof(size_t size, size_t align, bool reserved,
+ 				 gfp_t gfp)
+ {
++	if (iscandar_active() && !reserved) {
++		void *p;
++
++		/* Center 4.2 is served under the build's
++		 * uniprocessor precondition: on a UP build the
++		 * percpu translations are the identity, so the
++		 * arena address is the token, whole and exact,
++		 * and the run's size is size times a possible
++		 * CPU count of 1. The checks mirror the stock
++		 * rejection set below, which this door sits
++		 * above. Unlike the bridge door, an
++		 * atomic-context caller is NOT refused: the
++		 * direct call does not sleep (design section
++		 * 3), so the refusal has no remaining reason.
++		 * The run is zeroed here, as the chunk layer's
++		 * population would have done. Ruled
++		 * 2026-11-17; the scope is stated in the
++		 * paper. */
++		if (unlikely(!size || size > PCPU_MIN_UNIT_SIZE
++			     || align > PAGE_SIZE
++			     || !is_power_of_2(align)))
++			return NULL;
++		p = iscandar_alloc((u64)size * num_possible_cpus(),
++				   (unsigned int)align, 0);
++		if (!p)
++			return NULL;
++		memset(p, 0, (u64)size * num_possible_cpus());
++		return (void __percpu *)p;
++	}
++	iscandar_prefix_note(ISCANDAR_CENTER_PERCPU, size);
++
+ 	gfp_t pcpu_gfp;
+ 	bool is_atomic;
+ 	bool do_warn;
+@@ -2244,6 +2276,16 @@ void free_percpu(void __percpu *ptr)
+ 
+ 	kmemleak_free_percpu(ptr);
+ 
++	/* Center 4.2's free door, above the chunk search:
++	 * on a UP build the token is the arena address
++	 * itself, so the range test is exact. The chunk
++	 * search below has no chunk for an arena-born
++	 * token and must never see one. */
++	if (iscandar_ptr_in_arena(ptr)) {
++		iscandar_free((const void *)ptr, 0);
++		return;
++	}
++
+ 	addr = __pcpu_ptr_to_addr(ptr);
+ 	chunk = pcpu_chunk_addr_search(addr);
+ 	off = addr - chunk->base_addr;
+diff --git a/mm/slub.c b/mm/slub.c
+index 981140f75..df877b5cf 100644
+--- a/mm/slub.c
++++ b/mm/slub.c
+@@ -4963,9 +4963,16 @@ int build_detached_freelist(struct kmem_cache *s, size_t size,
+ 	return same;
+ }
+ 
++#ifdef CONFIG_SLUB_TINY
+ /*
+  * Internal bulk free of objects that were not initialised by the post alloc
+- * hooks and thus should not be processed by the free hooks
++ * hooks and thus should not be processed by the free hooks.
++ *
++ * In the full body this function's only caller was the
++ * alloc_bulk drain's error path, which the funnel
++ * (below) reroutes through the door'd
++ * kmem_cache_free_bulk; the TINY body's error path
++ * still calls it, so it stands under TINY only.
+  */
+ static void __kmem_cache_free_bulk(struct kmem_cache *s, size_t size, void **p)
+ {
+@@ -4986,6 +4993,7 @@ static void __kmem_cache_free_bulk(struct kmem_cache *s, size_t size, void **p)
+ 			     _RET_IP_);
+ 	} while (likely(size));
+ }
++#endif /* CONFIG_SLUB_TINY */
+ 
+ /* Note that interrupts must be enabled when calling this function. */
+ void kmem_cache_free_bulk(struct kmem_cache *s, size_t size, void **p)
+@@ -5031,72 +5039,36 @@ static inline
+ int __kmem_cache_alloc_bulk(struct kmem_cache *s, gfp_t flags, size_t size,
+ 			    void **p)
+ {
+-	struct kmem_cache_cpu *c;
+-	unsigned long irqflags;
++	/* The funnel (coverage audit item 2, ruled
++	 * 2026-11-19): the private per-CPU drain this
++	 * body carried is replaced by a loop over the
++	 * door'd center, one call per object. kfence is
++	 * the center's own first step, in its own order;
++	 * the drain's lock, tid bookkeeping, and slowpath
++	 * fallback are gone, the center carrying its own
++	 * synchronization. The contract is unchanged and
++	 * all-or-nothing: any failure frees the partial
++	 * fill, through the door'd bulk free (whose range
++	 * decision each pointer needs; the static twin
++	 * this error path used to name never passes the
++	 * 1.4 door), and returns 0. */
+ 	int i;
+ 
+-	/*
+-	 * Drain objects in the per cpu slab, while disabling local
+-	 * IRQs, which protects against PREEMPT and interrupts
+-	 * handlers invoking normal fastpath.
+-	 */
+-	c = slub_get_cpu_ptr(s->cpu_slab);
+-	local_lock_irqsave(&s->cpu_slab->lock, irqflags);
+-
+ 	for (i = 0; i < size; i++) {
+-		void *object = kfence_alloc(s, s->object_size, flags);
+-
+-		if (unlikely(object)) {
+-			p[i] = object;
+-			continue;
+-		}
+-
+-		object = c->freelist;
+-		if (unlikely(!object)) {
+-			/*
+-			 * We may have removed an object from c->freelist using
+-			 * the fastpath in the previous iteration; in that case,
+-			 * c->tid has not been bumped yet.
+-			 * Since ___slab_alloc() may reenable interrupts while
+-			 * allocating memory, we should bump c->tid now.
+-			 */
+-			c->tid = next_tid(c->tid);
+-
+-			local_unlock_irqrestore(&s->cpu_slab->lock, irqflags);
+-
+-			/*
+-			 * Invoking slow path likely have side-effect
+-			 * of re-populating per CPU c->freelist
+-			 */
+-			p[i] = ___slab_alloc(s, flags, NUMA_NO_NODE,
+-					    _RET_IP_, c, s->object_size);
+-			if (unlikely(!p[i]))
+-				goto error;
+-
+-			c = this_cpu_ptr(s->cpu_slab);
+-			maybe_wipe_obj_freeptr(s, p[i]);
+-
+-			local_lock_irqsave(&s->cpu_slab->lock, irqflags);
+-
+-			continue; /* goto for-loop */
+-		}
+-		c->freelist = get_freepointer(s, object);
+-		p[i] = object;
++		p[i] = slab_alloc_node(s, NULL, flags,
++				       NUMA_NO_NODE, _RET_IP_,
++				       s->object_size);
++		if (unlikely(!p[i]))
++			goto error;
+ 		maybe_wipe_obj_freeptr(s, p[i]);
+-		stat(s, ALLOC_FASTPATH);
+ 	}
+-	c->tid = next_tid(c->tid);
+-	local_unlock_irqrestore(&s->cpu_slab->lock, irqflags);
+-	slub_put_cpu_ptr(s->cpu_slab);
+-
+ 	return i;
+ 
+ error:
+-	slub_put_cpu_ptr(s->cpu_slab);
+-	__kmem_cache_free_bulk(s, i, p);
++	kmem_cache_free_bulk(s, i, p);
+ 	return 0;
+-
+ }
++
+ #else /* CONFIG_SLUB_TINY */
+ static int __kmem_cache_alloc_bulk(struct kmem_cache *s, gfp_t flags,
+ 				   size_t size, void **p)
+-- 
+2.43.0
+

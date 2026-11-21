@@ -1,0 +1,139 @@
+STAGED PATCH 0002 (kernel round) of 5: apply after 0001.
+Target: Linux 6.12.116, mm/slub.c. Line anchors are the
+manifest's numbers of record, checked against the
+pristine tree; context lines are schematic, parameter
+lists elided where the list does not record them.
+Re-base on the real tree before applying.
+
+Subject: iscandar: the slab centers in kernel form
+(1.1, 1.3, 1.4)
+
+The bridge staging's door shapes, with the bridge call
+replaced by the core's direct call. What the bridge
+notes established stands: at 1.1 the size served is
+s->object_size, the request in every case that reaches
+the door; each grant is a fresh run, so a cache's ctor
+runs on every grant; the zeroing of __GFP_ZERO is kept
+at the door, as the stock path keeps it.
+
+One shape changes with the medium. The bridge door
+asked the layer for an offset and converted it; the
+core's iscandar_alloc returns the arena pointer
+itself. And the registry check sharpens: registration
+in this build happens at creation, in every state
+(0003), so a cache that reaches 1.1 after ready with
+no registry entry was not born through 1.5, which is
+a finding, not a fallback: NULL, as the bridge ruled
+for the same case.
+
+The free doors decide by range first, exactly as
+before: an address inside the arena goes home; an
+address outside it was born outside it (a prefix
+object, a substrate object) and frees through the
+stock body. That is the design's named seam, not a
+fallback: nothing granted through the core can carry
+an out-of-arena address.
+
+The watch point is unchanged: alloc_slab_page gains
+the counter only, so the evidence run can show slab
+page allocations attributable to redirected caches at
+zero after the prefix (Andrew's ruling, 2026-11-11).
+
+--- a/mm/slub.c
++++ b/mm/slub.c
+@@ -4205,7 +4205,30 @@
+ static __fastpath_inline
+-void *slab_alloc_node(struct kmem_cache *s, ...)
++void *slab_alloc_node(struct kmem_cache *s, ...)
+ {
++	if (iscandar_active()) {
++		u32 cache_id = iscandar_cache_lookup(s);
++		void *object;
++
++		if (cache_id == 0)
++			/* A cache with no registry entry after
++			 * ready: a finding, not a fallback. */
++			return NULL;
++		object = iscandar_alloc(s->object_size, s->align,
++					cache_id);
++		if (!object)
++			return NULL;
++		if (s->ctor)
++			s->ctor(object);
++		if (unlikely(gfpflags & __GFP_ZERO))
++			memset(object, 0, s->object_size);
++		return object;
++	}
++	iscandar_prefix_note(ISCANDAR_CENTER_SLAB_ALLOC,
++			     s->object_size);
+ 	...
+ }
+@@ -4326,6 +4349,17 @@
+-void *__kmalloc_large_noprof(size_t size, gfp_t flags)
++void *__kmalloc_large_noprof(size_t size, gfp_t flags)
+ {
++	if (iscandar_active()) {
++		void *object = iscandar_alloc(size, 0, 0);
++
++		if (!object)
++			return NULL;
++		if (unlikely(flags & __GFP_ZERO))
++			memset(object, 0, size);
++		return object;
++	}
++	iscandar_prefix_note(ISCANDAR_CENTER_KMALLOC_LARGE, size);
+ 	...
+ }
+@@ -4785,6 +4819,13 @@
+-void kmem_cache_free(struct kmem_cache *s, void *objp)
++void kmem_cache_free(struct kmem_cache *s, void *objp)
+ {
++	if (iscandar_ptr_in_arena(objp)) {
++		iscandar_free(objp, iscandar_cache_lookup(s));
++		return;
++	}
+ 	...
+ }
+@@ -4817,6 +4858,12 @@
+-void kfree(const void *objp)
++void kfree(const void *objp)
+ {
++	if (iscandar_ptr_in_arena(objp)) {
++		iscandar_free(objp, 0);
++		return;
++	}
+ 	...
+ }
+@@ -4945,6 +4992,24 @@
+-void kmem_cache_free_bulk(struct kmem_cache *s, size_t size, void **p)
++void kmem_cache_free_bulk(struct kmem_cache *s, size_t size, void **p)
+ {
++	/* Each pointer decides by its own range: arena-born
++	 * pointers go home one by one; the rest are compacted
++	 * to the tail and freed by the stock body below. */
++	size_t i, stock = size;
++	u32 cache_id = iscandar_cache_lookup(s);
++
++	for (i = 0; i < size; i++) {
++		if (iscandar_ptr_in_arena(p[i])) {
++			iscandar_free(p[i], cache_id);
++			p[i] = p[--stock];
++			p[stock] = NULL;
++			i--;
++		}
++	}
++	size = stock;
++	if (size == 0)
++		return;
+ 	...
+ }
+@@ -2470,4 +2535,8 @@
+ static struct page *alloc_slab_page(...)
+ {
++	/* Watch point, instrumented only. Under the bypass
++	 * ruling this counter must not move for a redirected
++	 * cache after the early-boot prefix; the evidence run
++	 * reads it from /proc/iscandar. */
++	atomic64_inc(&iscandar_slab_page_calls);
+ 	...
+ }

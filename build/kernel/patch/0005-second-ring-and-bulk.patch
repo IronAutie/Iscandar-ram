@@ -1,0 +1,237 @@
+STAGED PATCH 0005 (kernel round) of 5: apply after 0001.
+Targets: Linux 6.12.116, mm/percpu.c, lib/genalloc.c,
+mm/slub.c. Line anchors are the manifest's numbers of
+record, checked against the pristine tree; context
+lines are schematic. Re-base on the real tree before
+applying.
+
+Subject: iscandar: the second ring in kernel form
+(4.2, 4.3), and the alloc_bulk funnel
+
+Center 4.1 (mempool) takes no hunk, as in both prior
+rounds: a mempool over slab is redirected at 1.1 with
+its elements, and a mempool over pages draws on the
+substrate, exactly as the reconciliation disposes the
+family.
+
+Center 4.2 (percpu). The door stands at the center,
+as ruled and as verified in the tree at the bench
+(2026-11-20: the alloc door at the head of
+pcpu_alloc_noprof, the free door above the chunk
+search in free_percpu). Two changes in kernel form.
+First, the bridge door's atomic-context refusal is
+removed: it existed because the bridge call sleeps,
+and the direct call does not (design section 3), so
+the refusal has no remaining reason. The mirrored
+rejection set stays, word for word: it is the stock
+contract, not a serving condition. Second, the
+zeroing covers the whole run; under the build's
+uniprocessor precondition (num_possible_cpus() is 1)
+that is byte-for-byte the bridge door's memset of
+size, and the comment says so, so the shape survives
+any later reading of the door out of context. The
+chunk bookkeeping stays the kernel's over the run, as
+the reconciliation states; the center's earliest
+traffic falls in the prefix and is stock and counted
+there, not missed.
+
+Center 4.3 (gen_pool). The bridge gated on pool
+registration; the audit replaced registration with
+the backing rule (item 3, ruled 2026-11-19), and this
+patch implements the rule where the audit puts it:
+the gate's test runs on each chunk as it is added.
+Every add path in this tree funnels through
+gen_pool_add_owner (gen_pool_add and gen_pool_add_virt
+are header inlines ending there), so one hook at its
+successful end sees every chunk, with the chunk's
+physical address in hand for the core's RAM test. The
+alloc door consults the recorded decision; the free
+door decides by range alone, as every free door in
+this design does, so a grant made while a pool stood
+served still frees home if the pool is later marked
+stock (the core prints that flip as a finding at the
+moment it happens, 0001).
+
+The alloc_bulk funnel (mm/slub.c), the audit's item 2
+as ruled: funnel it. The full-SLUB body of
+__kmem_cache_alloc_bulk (the live body: CONFIG_SLUB=y,
+SLUB_TINY not set, read from the build's .config at
+the bench) drains the per-CPU freelist privately,
+under the cpu_slab lock, with a tid bump and a
+slowpath fallback when the list runs dry. The funnel
+replaces the whole drain with a loop over the door'd
+center, slab_alloc_node, one call per object. Three
+consequences, each intended:
+- kfence needs no line of the funnel's own: the
+  center performs it, in the center's own order
+  (hook, kfence, fastpath), which is the order the
+  stock drain kept by hand.
+- The lock, the tid bookkeeping, and the slowpath
+  fallback disappear with the drain: the center
+  carries its own synchronization, and when the door
+  is active the core's irqsave section is the
+  synchronization. During the prefix the center
+  serves stock, so a prefix bulk call is stock-served
+  whole, counted at 1.1.
+- The error path changes its free: it named the
+  static __kmem_cache_free_bulk, which is correct for
+  stock objects and wrong for arena ones, since it
+  never passes the 1.4 door. A funneled fill can hold
+  arena objects, so the error path frees through
+  kmem_cache_free_bulk, the door'd entry, whose range
+  decision sends each pointer home by its own birth.
+  This is the funnel's twin: miss it, and the first
+  failed bulk fill leaks arena objects into the stock
+  freelist, which is precisely the failure class the
+  coverage audit exists to prevent. (The SLUB_TINY
+  body's error path has the identical line; it is
+  not compiled here, and its body already funnels by
+  construction, but if TINY is ever enabled the same
+  one-word change is owed there, and this note is
+  where that debt is recorded.)
+The all-or-nothing contract is preserved exactly: any
+failure frees the partial fill and returns 0.
+
+--- a/mm/percpu.c
++++ b/mm/percpu.c
+@@ -1743,7 +1743,30 @@
+-void __percpu *pcpu_alloc_noprof(size_t size, size_t align, bool reserved, ...)
++void __percpu *pcpu_alloc_noprof(size_t size, size_t align, bool reserved, ...)
+ {
++	if (iscandar_active() && !reserved) {
++		void *p;
++
++		/* Center 4.2 is served under the build's
++		 * uniprocessor precondition: on a UP build the
++		 * percpu translations are the identity, so the
++		 * arena address is the token, whole and exact,
++		 * and the run's size is size times a possible
++		 * CPU count of 1. The checks mirror the stock
++		 * rejection set below, which this door sits
++		 * above. Unlike the bridge door, an
++		 * atomic-context caller is NOT refused: the
++		 * direct call does not sleep (design section
++		 * 3), so the refusal has no remaining reason.
++		 * The run is zeroed here, as the chunk layer's
++		 * population would have done. Ruled
++		 * 2026-11-17; the scope is stated in the
++		 * paper. */
++		if (unlikely(!size || size > PCPU_MIN_UNIT_SIZE
++			     || align > PAGE_SIZE
++			     || !is_power_of_2(align)))
++			return NULL;
++		p = iscandar_alloc((u64)size * num_possible_cpus(),
++				   (unsigned int)align, 0);
++		if (!p)
++			return NULL;
++		memset(p, 0, (u64)size * num_possible_cpus());
++		return (void __percpu *)p;
++	}
++	iscandar_prefix_note(ISCANDAR_CENTER_PERCPU, size);
+ 	...
+ }
+@@ -2234,6 +2257,18 @@
+-void free_percpu(void __percpu *ptr)
++void free_percpu(void __percpu *ptr)
+ {
+ 	...
++	/* Center 4.2's free door, above the chunk search:
++	 * on a UP build the token is the arena address
++	 * itself, so the range test is exact. The chunk
++	 * search below has no chunk for an arena-born
++	 * token and must never see one. (The door sits
++	 * after the NULL check and the kmemleak hook, as
++	 * the bridge round placed it; verified in the
++	 * tree at the bench, 2026-11-20.) */
++	if (iscandar_ptr_in_arena(ptr)) {
++		iscandar_free((const void *)ptr, 0);
++		return;
++	}
+ 	...
+ }
+--- a/lib/genalloc.c
++++ b/lib/genalloc.c
+@@ -184,6 +184,14 @@
+-int gen_pool_add_owner(struct gen_pool *pool, unsigned long virt, phys_addr_t phys, ...)
++int gen_pool_add_owner(struct gen_pool *pool, unsigned long virt, phys_addr_t phys, ...)
+ {
+ 	...
++	/* At the successful end, with the chunk linked:
++	 * the backing rule's gate. Every add path funnels
++	 * through this function, so this one note sees
++	 * every chunk, with its physical range in hand
++	 * for the core's RAM test (0001). */
++	iscandar_gen_pool_note_chunk(pool, phys, size);
+ 	return 0;
+ }
+@@ -277,7 +285,20 @@
+-unsigned long gen_pool_alloc_algo_owner(struct gen_pool *pool, size_t size, ...)
++unsigned long gen_pool_alloc_algo_owner(struct gen_pool *pool, size_t size, ...)
+ {
++	if (iscandar_active() && iscandar_gen_pool_served(pool)) {
++		void *p = iscandar_alloc(size, 0, 0);
++
++		if (!p)
++			return 0;
++		return (unsigned long)p;
++	}
++	iscandar_prefix_note(ISCANDAR_CENTER_GENPOOL, size);
+ 	...
+ }
+@@ -487,5 +508,15 @@
+-void gen_pool_free_owner(struct gen_pool *pool, unsigned long addr, size_t size)
++void gen_pool_free_owner(struct gen_pool *pool, unsigned long addr, size_t size)
+ {
++	/* The range decision alone, as at every free
++	 * door: an arena-born address goes home whether
++	 * or not its pool still stands served, and the
++	 * bitmap machinery below must never see one. */
++	if (iscandar_ptr_in_arena((const void *)addr)) {
++		iscandar_free((const void *)addr, 0);
++		return;
++	}
+ 	...
+ }
+--- a/mm/slub.c
++++ b/mm/slub.c
+@@ -4965,7 +4965,34 @@
+-int __kmem_cache_alloc_bulk(struct kmem_cache *s, gfp_t flags, size_t size, void **p)
++int __kmem_cache_alloc_bulk(struct kmem_cache *s, gfp_t flags, size_t size, void **p)
+ {
++	/* The funnel (coverage audit item 2, ruled
++	 * 2026-11-19): the private per-CPU drain this
++	 * body carried is replaced by a loop over the
++	 * door'd center, one call per object. kfence is
++	 * the center's own first step, in its own order;
++	 * the drain's lock, tid bookkeeping, and slowpath
++	 * fallback are gone, the center carrying its own
++	 * synchronization. The contract is unchanged and
++	 * all-or-nothing: any failure frees the partial
++	 * fill, through the door'd bulk free (whose range
++	 * decision each pointer needs; the static twin
++	 * this error path used to name never passes the
++	 * 1.4 door), and returns 0. The re-base deletes
++	 * the drained body outright; it is elided below. */
++	int i;
++
++	for (i = 0; i < size; i++) {
++		p[i] = slab_alloc_node(s, NULL, flags,
++				       NUMA_NO_NODE, _RET_IP_,
++				       s->object_size);
++		if (unlikely(!p[i]))
++			goto error;
++		maybe_wipe_obj_freeptr(s, p[i]);
++	}
++	return i;
++
++error:
++	kmem_cache_free_bulk(s, i, p);
++	return 0;
+-	struct kmem_cache_cpu *c;
+-	unsigned long irqflags;
+-	int i;
+-	...
+-	slub_put_cpu_ptr(s->cpu_slab);
+-	__kmem_cache_free_bulk(s, i, p);
+-	return 0;
+ }
