@@ -1,0 +1,45 @@
+From: Iscandar build <iscandar@local>
+Subject: [PATCH 0007] iscandar: beam_free success is K4_GEAR_SUCCESS
+
+Second kernel-round boot (2026-11-22, the 0006 kernel):
+the canary passed and init printed "ready; count_overall
+84, net served 130988 pages". The doors then faulted on
+the first live free: "engine free status 8 at page 62",
+followed by repeated "ledger bin 62 nonzero (1) under a
+fresh grant", and the boot panicked at 0.94 s creating
+uid_cache, ENOMEM. Status 8 is K4_GEAR_SUCCESS: beam_free
+returns the unmark's status, and its success word is the
+gear convention, not K4_SUCCESS (Beam.c keeps its own
+count_overall bookkeeping on GEAR_SUCCESS only). The
+glue in iscandar_free read every sound free as a
+refusal, counted a violation, and left the ledger bin
+set under a page the store had already taken back; the
+next grant of that page then found the books in
+disagreement and was refused, and the refusal cascade
+starved cache creation. The engine's bookkeeping was
+correct throughout; the divergence was the ledger's
+alone. Fix the success test in iscandar_free. The other
+two K4_SUCCESS tests in core.c are correct as they
+stand: beam_allocate returns K4_SUCCESS, and the
+CPUPointer reconstruction returns K4_SUCCESS/K4_FAIL.
+Desk check: mm/iscandar/core.o compiles clean on the
+0006 stack.
+
+---
+--- a/mm/iscandar/core.c
++++ b/mm/iscandar/core.c
+@@ -309,7 +309,13 @@
+ 	t0 = get_cycles();
+ 	st = beam_free(beam, &ptr);
+ 	iscandar_latency_note(iscandar_class_of(count), t0);
+-	if (unlikely(st != K4_SUCCESS)) {
++	/* beam_free speaks the gear convention: its success
++	 * is K4_GEAR_SUCCESS, the unmark's own word, not
++	 * K4_SUCCESS. Reading it against K4_SUCCESS makes
++	 * every sound free a refusal and leaves the ledger
++	 * bin set under a page the store has already taken
++	 * back (first kernel-round live free, 2026-11-22). */
++	if (unlikely(st != K4_GEAR_SUCCESS)) {
+ 		/* The store refused what the ledger granted:
+ 		 * an overlay or double-free class event. The
+ 		 * books stay exactly as they are; the finding
