@@ -1,0 +1,265 @@
+--- a/include/linux/iscandar.h
++++ b/include/linux/iscandar.h
+@@ -31,6 +31,11 @@
+ 		     u32 cache_id);
+ void iscandar_free(const void *ptr, u32 cache_id);
+ 
++/* The usable size of the grant at ptr, in bytes, or
++ * zero when ptr carries no grant; __ksize's answer
++ * for arena pointers. */
++size_t iscandar_grant_size(const void *ptr);
++
+ /* The registry, filled at 1.5. Ids are 1-based; 0 is
+  * no cache. Registration is control path: process
+  * context, and it does not wait for ready. */
+--- a/mm/iscandar/core.c
++++ b/mm/iscandar/core.c
+@@ -48,6 +48,16 @@
+  * Beam state 266,512 B, extent ledger 262,144 B, cache
+  * registry 32,768 B, in that order. */
+ #define ISCANDAR_LEDGER_PAGES	ISCANDAR_ARENA_PAGES
++/* Ledger record forms (patch 0009): a plain grant is
++ * its page count in the bin of its first page. A
++ * shifted grant (an alignment above a page, served by
++ * an over-grant with the base rounded up) carries
++ * ISCANDAR_LEDGER_SHIFTED over its whole-run count in
++ * the bin of the returned page, and the head waste,
++ * in pages, in the bin of the last waste page. */
++#define ISCANDAR_LEDGER_SHIFTED	0x8000u
++#define ISCANDAR_LEDGER_COUNT	0x7fffu
++#define ISCANDAR_MAX_ALIGN_PAGES	256u
+ 
+ /* The registry entry, at the mass's fixed 64-byte
+  * stride. The cache pointer is written last at
+@@ -227,7 +237,8 @@
+ 
+ void *iscandar_alloc(size_t size, unsigned int align, u32 cache_id)
+ {
+-	u32 pages, page;
++	u32 pages, total, page, base, shift = 0;
++	u64 addr;
+ 	CPUPointer ptr;
+ 	unsigned long flags;
+ 	cycles_t t0;
+@@ -235,27 +246,71 @@
+ 
+ 	if (unlikely(size == 0))
+ 		return ZERO_SIZE_PTR;
+-	/* Grants are page-aligned by construction; a larger
+-	 * alignment is refused here and in the doors' own
+-	 * rejection sets, never silently rounded. */
+-	if (unlikely(align > PAGE_SIZE))
+-		return NULL;
+ 	pages = DIV_ROUND_UP(size, PAGE_SIZE);
+-	if (unlikely(pages > ISCANDAR_CUBE_PAGES)) {
++	total = pages;
++	/* A power-of-two alignment above a page is served,
++	 * not refused (patch 0009, ruling A): the run is
++	 * over-granted by up to align_pages - 1 pages and
++	 * the returned base is rounded up to the alignment
++	 * in address space. The ledger records a shifted
++	 * grant (see iscandar_free) so the free returns the
++	 * whole run. An alignment that is not a power of
++	 * two, or beyond the recorded bound, is refused
++	 * with a finding, never silently rounded. The
++	 * pre-0009 form refused every alignment above a
++	 * page, silently, which is what stopped the KR5
++	 * boot: kmalloc(4098) for the initramfs name buffer
++	 * lands in kmalloc-8k, whose recorded alignment
++	 * is 8192. */
++	if (align > PAGE_SIZE) {
++		u32 align_pages;
++
++		if (unlikely(align & (align - 1))) {
++			iscandar_refusals++;
++			pr_err("iscandar: alignment %u not a power of two; refused (size %zu)\n",
++			       align, size);
++			return NULL;
++		}
++		align_pages = align >> PAGE_SHIFT;
++		if (unlikely(align_pages > ISCANDAR_MAX_ALIGN_PAGES)) {
++			iscandar_refusals++;
++			pr_err("iscandar: alignment %u beyond the recorded bound; refused (size %zu)\n",
++			       align, size);
++			return NULL;
++		}
++		total = pages + align_pages - 1;
++		if (unlikely(total > ISCANDAR_LEDGER_COUNT)) {
++			iscandar_refusals++;
++			pr_err("iscandar: shifted grant of %u pages beyond the ledger record; refused (size %zu)\n",
++			       total, size);
++			return NULL;
++		}
++	}
++	if (unlikely(total > ISCANDAR_CUBE_PAGES)) {
+ 		iscandar_refusals++;
+ 		return NULL;
+ 	}
+ 	spin_lock_irqsave(&iscandar_engine_lock, flags);
+ 	t0 = get_cycles();
+-	st = beam_allocate(beam, (int32_t)pages, &ptr);
+-	iscandar_latency_note(iscandar_class_of(pages), t0);
++	st = beam_allocate(beam, (int32_t)total, &ptr);
++	iscandar_latency_note(iscandar_class_of(total), t0);
+ 	if (st != K4_SUCCESS) {
+ 		iscandar_refusals++;
+ 		spin_unlock_irqrestore(&iscandar_engine_lock, flags);
++		pr_err("iscandar: engine allocate status %d for %u pages; refused\n",
++		       st, total);
+ 		return NULL;
+ 	}
+ 	page = iscandar_cptr_to_page(&ptr);
+-	if (unlikely(ledger[page] != 0)) {
++	base = page;
++	if (align > PAGE_SIZE) {
++		addr = ALIGN((u64)(uintptr_t)arena +
++			     ((u64)page << PAGE_SHIFT), (u64)align);
++		base = (u32)((addr - (u64)(uintptr_t)arena) >> PAGE_SHIFT);
++		shift = base - page;
++	}
++	if (unlikely(ledger[page] != 0 || ledger[base] != 0 ||
++		     (shift && ledger[base - 1] != 0))) {
+ 		/* The store granted what the ledger says is
+ 		 * live: the books disagree. Return the grant,
+ 		 * count it, and refuse. Debugger time (R12). */
+@@ -266,16 +321,21 @@
+ 		       page, ledger[page]);
+ 		return NULL;
+ 	}
+-	ledger[page] = (u16)pages;
+-	iscandar_live_pages += pages;
++	if (shift) {
++		ledger[base] = (u16)(ISCANDAR_LEDGER_SHIFTED | total);
++		ledger[base - 1] = (u16)shift;
++	} else {
++		ledger[base] = (u16)total;
++	}
++	iscandar_live_pages += total;
+ 	iscandar_registry_live(cache_id, 1);
+ 	spin_unlock_irqrestore(&iscandar_engine_lock, flags);
+-	return (void *)((char *)arena + ((u64)page << PAGE_SHIFT));
++	return (void *)((char *)arena + ((u64)base << PAGE_SHIFT));
+ }
+ 
+ void iscandar_free(const void *p, u32 cache_id)
+ {
+-	u32 page, count;
++	u32 page, count, total, start;
+ 	CPUPointer ptr;
+ 	unsigned long flags;
+ 	cycles_t t0;
+@@ -298,17 +358,32 @@
+ 		pr_err("iscandar: free of ungranted arena page %u\n", page);
+ 		return;
+ 	}
+-	st = iscandar_page_to_cptr(page, count, &ptr);
++	/* A shifted grant (patch 0009) carries the
++	 * ISCANDAR_LEDGER_SHIFTED flag over the whole
++	 * run's count in the returned page's bin, and the
++	 * head waste in the bin of the last waste page;
++	 * the run's true start is the returned page minus
++	 * the shift. A plain grant is the count alone, at
++	 * its own start. Either way the store is handed
++	 * the whole run it granted. */
++	if (count & ISCANDAR_LEDGER_SHIFTED) {
++		total = count & ISCANDAR_LEDGER_COUNT;
++		start = page - ledger[page - 1];
++	} else {
++		total = count;
++		start = page;
++	}
++	st = iscandar_page_to_cptr(start, total, &ptr);
+ 	if (unlikely(st != K4_SUCCESS)) {
+ 		iscandar_violations++;
+ 		spin_unlock_irqrestore(&iscandar_engine_lock, flags);
+ 		pr_err("iscandar: pointer reconstruction failed at page %u\n",
+-		       page);
++		       start);
+ 		return;
+ 	}
+ 	t0 = get_cycles();
+ 	st = beam_free(beam, &ptr);
+-	iscandar_latency_note(iscandar_class_of(count), t0);
++	iscandar_latency_note(iscandar_class_of(total), t0);
+ 	/* beam_free speaks the gear convention: its success
+ 	 * is K4_GEAR_SUCCESS, the unmark's own word, not
+ 	 * K4_SUCCESS. Reading it against K4_SUCCESS makes
+@@ -323,15 +398,45 @@
+ 		iscandar_violations++;
+ 		spin_unlock_irqrestore(&iscandar_engine_lock, flags);
+ 		pr_err("iscandar: engine free status %d at page %u\n",
+-		       st, page);
++		       st, start);
+ 		return;
+ 	}
+ 	ledger[page] = 0;
+-	iscandar_live_pages -= count;
++	if (count & ISCANDAR_LEDGER_SHIFTED)
++		ledger[page - 1] = 0;
++	iscandar_live_pages -= total;
+ 	iscandar_registry_live(cache_id, -1);
+ 	spin_unlock_irqrestore(&iscandar_engine_lock, flags);
+ }
+ 
++/* The usable size of the grant at p, in bytes: the
++ * whole run for a plain grant, the run minus the head
++ * waste for a shifted one. Zero when p carries no
++ * grant. This is what __ksize answers for arena
++ * pointers (patch 0009): a door grant has no SLUB
++ * folio, so the stock __ksize warned and returned 0,
++ * which broke every size consumer in KR5, Tomoyo's
++ * accounting and krealloc's copy among them. */
++size_t iscandar_grant_size(const void *p)
++{
++	u32 page, count;
++	unsigned long flags;
++	size_t ret = 0;
++
++	if (!iscandar_ptr_in_arena(p))
++		return 0;
++	page = (u32)(iscandar_ptr_to_offset(p) >> PAGE_SHIFT);
++	spin_lock_irqsave(&iscandar_engine_lock, flags);
++	count = ledger[page];
++	if (count & ISCANDAR_LEDGER_SHIFTED)
++		ret = (size_t)((count & ISCANDAR_LEDGER_COUNT) -
++			       ledger[page - 1]) << PAGE_SHIFT;
++	else if (count)
++		ret = (size_t)count << PAGE_SHIFT;
++	spin_unlock_irqrestore(&iscandar_engine_lock, flags);
++	return ret;
++}
++
+ /* The registry: control path, mutex, confirm-then-commit. */
+ u32 iscandar_cache_lookup(struct kmem_cache *s)
+ {
+--- a/mm/slab_common.c
++++ b/mm/slab_common.c
+@@ -1041,6 +1041,11 @@
+ 	if (unlikely(object == ZERO_SIZE_PTR))
+ 		return 0;
+ 
++	/* A door grant has no SLUB folio; the ledger is
++	 * its size record (patch 0009). */
++	if (iscandar_ptr_in_arena(object))
++		return iscandar_grant_size(object);
++
+ 	folio = virt_to_folio(object);
+ 
+ 	if (unlikely(!folio_test_slab(folio))) {
+--- a/mm/slub.c
++++ b/mm/slub.c
+@@ -4218,10 +4218,13 @@
+ 	if (iscandar_active()) {
+ 		u32 cache_id = iscandar_cache_lookup(s);
+ 
+-		if (cache_id == 0)
++		if (cache_id == 0) {
+ 			/* A cache with no registry entry after
+ 			 * ready: a finding, not a fallback. */
++			pr_err("iscandar: allocation from unregistered cache %s; refused\n",
++			       s->name);
+ 			return NULL;
++		}
+ 		object = iscandar_alloc(s->object_size, s->align,
+ 					cache_id);
+ 		if (!object)
