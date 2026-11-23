@@ -1,0 +1,98 @@
+From: Iscandar build <iscandar@local>
+Subject: [PATCH 0008] iscandar: register caches at do_kmem_cache_create
+
+Third and fourth kernel-round boots (2026-11-22): with
+0007 in, KR4 reached ready with no engine findings, then
+cache creations failed ENOMEM one after another (a dma
+cache, iommu_iova, uid_cache with SLAB_PANIC) and the
+boot panicked. The failing allocations never reached
+iscandar_alloc: the door's registry lookup returned 0
+and slab_alloc_node returned NULL before any counter
+moved, which is why the log is silent after ready.
+Cause, from the tree: patch 0003 hooked registration at
+the end of __kmem_cache_create_args, but kmem_cache,
+kmem_cache_node, and the whole kmalloc family are born
+by create_boot_cache, which calls do_kmem_cache_create
+directly and never passes create_args. Those caches
+were never registered, and after ready every allocation
+from them met the lookup-0 finding. The coverage audit
+enumerated the allocation doors but not the cache birth
+paths; this is the birth path it missed. Fix: register
+at the out point of do_kmem_cache_create, the one
+function both birth paths pass (its error path already
+releases the cache, so a cap refusal unwinds the same
+way), remove the create_args hook, and follow the two
+boot caches across bootstrap(), where the cache changes
+identity from the boot static to a heap struct: the
+registry is updated to name the live pointer. Desk
+check: mm/slub.o and mm/slab_common.o compile clean on
+the 0007 stack.
+
+---
+--- a/mm/slab_common.c
++++ b/mm/slab_common.c
+@@ -377,17 +377,10 @@
+ 		}
+ 		return NULL;
+ 	}
+-	/* Register before the cache is returned to its
+-	 * creator: an unregistered cache must never reach
+-	 * 1.1. Registration runs in every state (the
+-	 * registry is mass memory beside the doors; there
+-	 * is no raise to defer it to). A refusal is the
+-	 * cap's verdict: the creation fails, loudly. */
+-	if (iscandar_cache_register(s, object_size,
+-				    args->align, flags)) {
+-		kmem_cache_destroy(s);
+-		return NULL;
+-	}
++	/* Registration itself lives at the end of
++	 * do_kmem_cache_create, the one point every
++	 * cache birth passes, boot-born and general
++	 * alike (patch 0008). */
+ 	if (!iscandar_active())
+ 		iscandar_prefix_note(ISCANDAR_CENTER_CACHE_SETUP,
+ 				     object_size);
+--- a/mm/slub.c
++++ b/mm/slub.c
+@@ -6035,6 +6035,15 @@
+ #endif
+ 	}
+ 	list_add(&s->list, &slab_caches);
++	/* The cache changes identity here: the registry
++	 * holds the boot static's name from its creation.
++	 * Follow the identity across: unregister the
++	 * static, register the live cache. */
++	iscandar_cache_unregister(static_cache);
++	if (iscandar_cache_register(s, s->object_size,
++				    s->align, s->flags))
++		panic("iscandar: registry refused bootstrapped cache %s\n",
++		      s->name);
+ 	return s;
+ }
+ 
+@@ -6183,6 +6192,24 @@
+ 		debugfs_slab_add(s);
+ 
+ out:
++	if (!err)
++		/* Every cache birth in the tree passes this
++		 * point: the general path through create_cache
++		 * and the boot path through create_boot_cache
++		 * alike. Register here, before the cache is
++		 * returned to its creator, so no live cache is
++		 * ever unregistered. (The hook patch 0003
++		 * placed at the end of __kmem_cache_create_args
++		 * never saw the boot-born caches: kmem_cache,
++		 * kmem_cache_node, and the whole kmalloc
++		 * family are born by create_boot_cache, and
++		 * every allocation from them after ready met
++		 * lookup 0 and returned NULL, KR4, 2026-11-22.)
++		 * A refusal is the cap's verdict: the
++		 * creation fails through the same release
++		 * path as any other error. */
++		err = iscandar_cache_register(s, s->object_size,
++					      s->align, s->flags);
+ 	if (err)
+ 		__kmem_cache_release(s);
+ 	return err;
