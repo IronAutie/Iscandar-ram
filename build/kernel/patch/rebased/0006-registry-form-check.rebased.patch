@@ -1,0 +1,53 @@
+From: Iscandar build <iscandar@local>
+Subject: [PATCH 0006] iscandar: registry form check at init, not born-empty
+
+First kernel-round boot (2026-11-22, image
+elbe-build-20261122-134513): the engine shut at init with
+"registry born occupied at 0". The assertion could never
+hold: patch 0003 registers caches in every state from the
+first cache creation, and kmem_cache_init precedes
+postcore_initcall, so the early caches lawfully occupy
+the first registry slots before iscandar_init runs. The
+Beam mass checks and the ledger born-zero check ahead of
+this one passed in the running kernel; the canary never
+ran. Replace the born-empty assertion with a form check:
+an occupied entry must carry its slot's id (the register
+path's staged write, s last); an empty entry must be
+wholly zero, as the mass bore it and as the unregister
+path leaves it. Ruled by Andrew 2026-11-22 ("go ahead
+and make the natural fix"). Desk check: mm/iscandar/
+core.o compiles clean against the rebased stack.
+
+---
+--- a/mm/iscandar/core.c
++++ b/mm/iscandar/core.c
+@@ -576,9 +576,28 @@
+ 			return 0;
+ 		}
+ 	}
++	/* The registry is not born empty, and must not be:
++	 * registration runs in every state from the first
++	 * cache creation (patch 0003), and kmem_cache_init
++	 * precedes this initcall, so the early caches
++	 * lawfully occupy the first slots before init
++	 * runs. What init verifies is form. An occupied
++	 * entry carries the id of its slot (id == slot + 1,
++	 * the register path's staged write, s last); an
++	 * empty entry is wholly zero, as the mass bore it
++	 * and as the unregister path leaves it. Anything
++	 * else is a torn or foreign write: engine shut. */
+ 	for (i = 0; i < ISCANDAR_REGISTRY_CAP; i++) {
+ 		if (registry[i].s) {
+-			pr_err("iscandar: registry born occupied at %d; engine shut\n",
++			if (registry[i].id != (u32)i + 1) {
++				pr_err("iscandar: registry entry %d malformed: id %u; engine shut\n",
++				       i, registry[i].id);
++				iscandar_state = ISCANDAR_ST_CLOSED;
++				return 0;
++			}
++		} else if (memchr_inv(&registry[i], 0,
++				      sizeof(registry[i]))) {
++			pr_err("iscandar: registry entry %d torn: empty but nonzero; engine shut\n",
+ 			       i);
+ 			iscandar_state = ISCANDAR_ST_CLOSED;
+ 			return 0;
