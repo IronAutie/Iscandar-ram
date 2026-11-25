@@ -1,0 +1,158 @@
+--- a/mm/slub.c
++++ b/mm/slub.c
+@@ -4199,6 +4199,23 @@
+ 	return memcg_slab_post_alloc_hook(s, lru, flags, size, p);
+ }
+ 
++/* The ACCOUNT pads (patch 0012). Kernel memory accounting
++ * (__GFP_ACCOUNT) is not implemented at the doors: no charge is
++ * made, and no call into the core is made for the term on either
++ * side (ruled 2026-11-24). What stands at each door where stock
++ * would spend the term is one of these statements and nothing
++ * else: a breakpoint seat. The alloc seat is reached only by a
++ * request carrying the flag, so a debugger stopped there is
++ * looking at kernel code that asked for accounted memory
++ * through a door; the caller is then to be deduced and ruled
++ * on. The free call carries no flag, so the free seat stands
++ * where stock's uncharge would accompany a door free and is
++ * reached by every door free: the pair seat, not a detector.
++ * The variables are written and never read; volatile keeps the
++ * statements in the build. */
++static volatile int iscandar_account_alloc_pad;
++static volatile int iscandar_account_free_pad;
++
+ /*
+  * Inlined fastpath so that allocation functions (kmalloc, kmem_cache_alloc)
+  * have the fastpath folded into their functions. So no function call
+@@ -4233,6 +4250,8 @@
+ 			s->ctor(object);
+ 		if (unlikely(gfpflags & __GFP_ZERO))
+ 			memset(object, 0, s->object_size);
++		if (unlikely(gfpflags & __GFP_ACCOUNT))
++			iscandar_account_alloc_pad = 1;
+ 		return object;
+ 	}
+ 	iscandar_prefix_note(ISCANDAR_CENTER_SLAB_ALLOC,
+@@ -4362,6 +4381,8 @@
+ 			return NULL;
+ 		if (unlikely(flags & __GFP_ZERO))
+ 			memset(object, 0, size);
++		if (unlikely(flags & __GFP_ACCOUNT))
++			iscandar_account_alloc_pad = 1;
+ 		return object;
+ 	}
+ 	iscandar_prefix_note(ISCANDAR_CENTER_KMALLOC_LARGE, size);
+@@ -4826,6 +4847,7 @@
+ void kmem_cache_free(struct kmem_cache *s, void *x)
+ {
+ 	if (iscandar_ptr_in_arena(x)) {
++		iscandar_account_free_pad = 1;
+ 		iscandar_free(x, iscandar_cache_lookup(s));
+ 		return;
+ 	}
+@@ -4862,6 +4884,7 @@
+ void kfree(const void *object)
+ {
+ 	if (iscandar_ptr_in_arena(object)) {
++		iscandar_account_free_pad = 1;
+ 		iscandar_free(object, 0);
+ 		return;
+ 	}
+@@ -5013,6 +5036,7 @@
+ 
+ 		for (i = 0; i < size; i++) {
+ 			if (iscandar_ptr_in_arena(p[i])) {
++				iscandar_account_free_pad = 1;
+ 				iscandar_free(p[i], cache_id);
+ 				p[i] = p[--stock];
+ 				p[stock] = NULL;
+--- a/mm/vmalloc.c
++++ b/mm/vmalloc.c
+@@ -3414,6 +3414,23 @@
+  * if we have CONFIG_ARCH_HAVE_NMI_SAFE_CMPXCHG, but making the calling
+  * conventions for vfree() arch-dependent would be a really bad idea).
+  */
++/* The ACCOUNT pads (patch 0012). Kernel memory accounting
++ * (__GFP_ACCOUNT) is not implemented at the doors: no charge is
++ * made, and no call into the core is made for the term on either
++ * side (ruled 2026-11-24). What stands at each door where stock
++ * would spend the term is one of these statements and nothing
++ * else: a breakpoint seat. The alloc seat is reached only by a
++ * request carrying the flag, so a debugger stopped there is
++ * looking at kernel code that asked for accounted memory
++ * through a door; the caller is then to be deduced and ruled
++ * on. The free call carries no flag, so the free seat stands
++ * where stock's uncharge would accompany a door free and is
++ * reached by every door free: the pair seat, not a detector.
++ * The variables are written and never read; volatile keeps the
++ * statements in the build. */
++static volatile int iscandar_account_alloc_pad;
++static volatile int iscandar_account_free_pad;
++
+ void vfree(const void *addr)
+ {
+ 	struct vm_struct *vm;
+@@ -3464,8 +3481,10 @@
+ 			__free_page(page);
+ 		cond_resched();
+ 	}
+-	if (door)
++	if (door) {
++		iscandar_account_free_pad = 1;
+ 		iscandar_free_by_page(vm->pages[0]);
++	}
+ 	if (!(vm->flags & VM_MAP_PUT_PAGES))
+ 		atomic_long_sub(vm->nr_pages, &nr_vmalloc_pages);
+ 	kvfree(vm->pages);
+@@ -3636,6 +3655,8 @@
+ 		 * console in __process_echoes. */
+ 		if (gfp & __GFP_ZERO)
+ 			memset(run, 0, (u64)nr_pages << PAGE_SHIFT);
++		if (gfp & __GFP_ACCOUNT)
++			iscandar_account_alloc_pad = 1;
+ 		for (i = 0; i < nr_pages; i++)
+ 			pages[i] = iscandar_offset_to_page(
+ 				iscandar_ptr_to_offset(run)
+--- a/mm/percpu.c
++++ b/mm/percpu.c
+@@ -1726,6 +1726,23 @@
+ }
+ #endif
+ 
++/* The ACCOUNT pads (patch 0012). Kernel memory accounting
++ * (__GFP_ACCOUNT) is not implemented at the doors: no charge is
++ * made, and no call into the core is made for the term on either
++ * side (ruled 2026-11-24). What stands at each door where stock
++ * would spend the term is one of these statements and nothing
++ * else: a breakpoint seat. The alloc seat is reached only by a
++ * request carrying the flag, so a debugger stopped there is
++ * looking at kernel code that asked for accounted memory
++ * through a door; the caller is then to be deduced and ruled
++ * on. The free call carries no flag, so the free seat stands
++ * where stock's uncharge would accompany a door free and is
++ * reached by every door free: the pair seat, not a detector.
++ * The variables are written and never read; volatile keeps the
++ * statements in the build. */
++static volatile int iscandar_account_alloc_pad;
++static volatile int iscandar_account_free_pad;
++
+ /**
+  * pcpu_alloc - the percpu allocator
+  * @size: size of area to allocate in bytes
+@@ -1771,6 +1788,8 @@
+ 		if (!p)
+ 			return NULL;
+ 		memset(p, 0, (u64)size * num_possible_cpus());
++		if (gfp & __GFP_ACCOUNT)
++			iscandar_account_alloc_pad = 1;
+ 		return (void __percpu *)p;
+ 	}
+ 	iscandar_prefix_note(ISCANDAR_CENTER_PERCPU, size);
+@@ -2282,6 +2301,7 @@
+ 	 * search below has no chunk for an arena-born
+ 	 * token and must never see one. */
+ 	if (iscandar_ptr_in_arena(ptr)) {
++		iscandar_account_free_pad = 1;
+ 		iscandar_free((const void *)ptr, 0);
+ 		return;
+ 	}
