@@ -1,0 +1,20 @@
+--- a/mm/vmalloc.c
++++ b/mm/vmalloc.c
+@@ -3625,6 +3625,17 @@
+ 				     PAGE_SIZE, 0);
+ 		if (!run)
+ 			return 0;
++		/* The caller's zeroing term (patch 0011): in
++		 * stock, the page allocator spends __GFP_ZERO
++		 * out of the gfp this door receives; the door
++		 * never read it, and a door grant is a recycled
++		 * run, so the zeroing is spent here, on the
++		 * whole run, before the pages are named.
++		 * KR7/KR8: a vzalloc consumer (n_tty_data) born
++		 * holding a dead object's remains wedged the
++		 * console in __process_echoes. */
++		if (gfp & __GFP_ZERO)
++			memset(run, 0, (u64)nr_pages << PAGE_SHIFT);
+ 		for (i = 0; i < nr_pages; i++)
+ 			pages[i] = iscandar_offset_to_page(
+ 				iscandar_ptr_to_offset(run)
