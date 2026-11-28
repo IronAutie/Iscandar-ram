@@ -1,0 +1,200 @@
+## KR12: step statistics and the cycles control (DRAFT, prepared 2026-11-27, for Paper 3)
+
+Status: DRAFT for Andrew's check. Nothing here has been run.
+Patch 0013 is final (step counters). The harness is a draft in
+kr12-scratch/harness/. This sheet is not yet part of
+BENCH-RUN-SHEET.md; it moves there on Andrew's stet.
+
+Scope (Andrew, 2026-11-27): two questions KR11 left open.
+First, the step guarantee has only ever been measured in the
+userland replay (Paper 2, theory); KR12 measures it in the
+running kernel (this paper, practice): patch 0013 counts the
+engine's steps at the sim's own sites and /proc/iscandar gains
+total_steps and worst_steps per class. Second, the timing
+figures have no denominator: KR12 runs a control, the SAME
+kernel binary booted with the layer held shut (stock serves),
+and times NANO and TINY door calls in both boots with one
+harness. The comparison is timing VARIANCE, not speed: which
+server's distribution is tighter, stated as the
+worst-to-median ratio. Stock is expected to post the lower
+medians. That is in the prediction, not discovered afterward.
+
+The kernel: build of record (0001-0012) plus 0013, one binary
+for both boots. Boot A serves. Boot B is the same binary with
+`iscandar_hold` appended to the kernel command line: core.c's
+init takes the hold branch before the canary, prints
+"iscandar: held shut by iscandar_hold; stock serves", and
+every door serves stock for the boot (the KR2 closed state,
+arrived at by parameter rather than by refusal). No second
+build, no config delta: the control differs from the
+experimental boot by one boot flag and nothing else.
+
+Launch: the KR10/KR11 line unchanged (six bridge-era units
+masked, serial socket wait=on, monitor unix socket, -display
+none), plus `nokaslr` as at KR11. Logfiles console-kr12a.log
+(Boot A) and console-kr12b.log (Boot B). Boot B adds
+`iscandar_hold` to the kernel command line; nothing else in
+the launch changes. The carry-in drive (below) is attached
+for both boots.
+
+Preparation (host, telesart, in order):
+
+1. Apply patch 0013 to the bench tree and rebuild in the
+   FOREGROUND (the bench rule). Expected: clean build; the
+   link check still reads .iscandar_state 561,424 bytes
+   (0013 adds no mass: its ledgers are ordinary statics in
+   core.c, and the Beam struct is untouched by design).
+2. Build the harness against the same tree:
+   `make -C ~/linux-6.12.116-kr M=<kr12-scratch/harness> modules`
+   Expected: iscandar_cycles_harness.ko, no warnings. Run
+   `modinfo -F vermagic` on it and compare with the guest's
+   `uname -r` once booted: they must be equal before insmod
+   is attempted. (Desk check on the VM: the module's object
+   compiles clean against the staged tree; modpost could not
+   complete there because the copied tree carries no
+   Module.symvers. On telesart the build tree has its own
+   symvers and the link completes. Every symbol the module
+   uses is a stock export; it links against no Iscandar
+   symbol.)
+3. Make the carry-in image, kr12-drive.img, 16 MB ext2 as at
+   KR11, holding two files: iscandar_cycles_harness.ko and
+   the exerciser binary (the KR11 static build, for Boot A's
+   standard run). Attach as virtio-blk-pci as at KR11
+   (guest sees /dev/vdc).
+
+Before either boot, two checks in the guest (Boot A serves
+for these; they are image facts, not boot facts):
+- Module loading exists in this image: `command -v insmod`,
+  and if that is empty, `command -v busybox` (busybox insmod
+  serves). Also `cat /proc/sys/kernel/modules_disabled`
+  must read 0. If all of these fail, STOP: the fallback is a
+  built-in harness (see HARNESS-NOTE.md), which is a separate
+  patch and Andrew's ruling, not a bench improvisation.
+- `free -m` and `df -h /` (the RAM budget readings, as at
+  KR11).
+
+Boot A procedure (serving; the steps of record):
+
+1. Boot to login on the plain KR12 line (no hold). Console
+   must show "iscandar: ready". Take the pre-readings: full
+   /proc/iscandar set, copied whole. The class lines now read
+   `class %s calls %llu worst_cycles %llu total_steps %llu
+   worst_steps %llu`.
+2. Mount the carry-in drive; install the exerciser to
+   /usr/local/sbin/ as at KR11. Do NOT insmod the harness yet.
+3. Print the prediction sheet (`iscandar-exerciser
+   ledger-check`), then the standard run, as at KR11.
+4. Take the post-exerciser readings: full /proc/iscandar set.
+   THESE are the step readings of record: total_steps and
+   worst_steps per class cover the boot and the exerciser
+   together, the same population KR11's worst_cycles covered.
+   Fill Table 1 from the pre and post sets.
+5. Only now the harness: `insmod iscandar_cycles_harness.ko`,
+   then `echo run > /proc/iscandar_cycles_harness`. Expected:
+   ten ICH1 lines in the console log (header, 4 sizes x
+   alloc/free, done), header reading boot=serving and
+   state="state ready". Fill Table 2, Boot A rows.
+6. Take a final /proc/iscandar reading and keep it, labelled
+   harness-inclusive: the harness's own 44,000 door calls
+   (11,000 pairs x 4 sizes) are inside its deltas, by design
+   and on the record, not subtracted anywhere.
+7. `rmmod iscandar_cycles_harness`. Power off clean.
+
+Boot B procedure (control; harness only):
+
+1. Boot the SAME kernel and image with `iscandar_hold`
+   appended. Console must show "iscandar: held shut by
+   iscandar_hold; stock serves". Take /proc/iscandar: first
+   line must read "state closed". If it reads ready, STOP:
+   the control is not a control.
+2. `free -m` (symmetry with Boot A).
+3. Mount the carry-in drive. `insmod
+   iscandar_cycles_harness.ko` (the same .ko; same kernel),
+   then `echo run > /proc/iscandar_cycles_harness`. Expected:
+   ten ICH1 lines, header reading boot=control and
+   state="state closed". The harness reads its label from
+   /proc/iscandar itself; a header that says serving ends
+   the run as mislabelled evidence. Fill Table 2, Boot B rows.
+4. No exerciser run in this boot: against stock it would
+   measure the guest's libc malloc, which is not a party to
+   the comparison.
+5. `rmmod`, power off clean.
+
+The prediction, stated in advance (Andrew's terms):
+
+- Boot A decisions identical to KR11: exerciser prediction
+  matched class by class, refusals 0, violations 0.
+- Step worsts, nano and tiny, in the order of the replay
+  trace's worsts (nano 403, tiny 61) and under the per-cube
+  ceiling of 1,056. A worst above the ceiling in any class
+  falsifies the composition, not just the run.
+- Cycles: the control's medians at the vmalloc door are
+  expected LOWER than Fubuki's (the stock page allocator's
+  fast paths are the optimized incumbent; nothing in the
+  layer's design disputes this). The control's
+  worst-to-median ratios are expected to run long; Fubuki's
+  ratios are expected near 1 by comparison, its worst
+  sitting close to its median, because its cost is a bounded
+  walk whose length the step counters have just measured.
+  The paper's claim rides on the ratios, not the medians.
+
+What the comparison is, stated plainly: the step table sets
+the replay's theory beside the kernel's practice in the
+theory's own unit, counted at the same loop sites. The
+cycles table sets two servers of one door beside each other
+under one harness, one binary, one image, differing only in
+a boot flag. Neither table is a speed claim. The first says
+the guarantee was measured where it was promised; the
+second says what the guarantee costs and buys in time:
+a median conceded, a tail refused.
+
+### Table 1: Boot A step readings (fill from /proc/iscandar)
+
+| class | calls pre | calls post | worst_cycles post | total_steps post | worst_steps post | mean steps (total/calls) |
+|---|---|---|---|---|---|---|
+| nano | | | | | | |
+| tiny | | | | | | |
+| small | | | | | | |
+| large | | | | | | |
+| huge | | | | | | |
+| cubecheck | | | | | | |
+
+Also record, as at KR11: state, count_overall pre/post,
+refusals, violations, slab_page_calls, registry, gen_pool,
+lead pre/post.
+
+### Table 2: cycles harness (fill from the ICH1 lines)
+
+| boot | size | pages | class | op | n | min | median | mean | worst | ratio_milli |
+|---|---|---|---|---|---|---|---|---|---|---|
+| serving | 4096 | 1 | nano | alloc | 10000 | | | | | |
+| serving | 4096 | 1 | nano | free | 10000 | | | | | |
+| serving | 32768 | 8 | nano | alloc | 10000 | | | | | |
+| serving | 32768 | 8 | nano | free | 10000 | | | | | |
+| serving | 65536 | 16 | tiny | alloc | 10000 | | | | | |
+| serving | 65536 | 16 | tiny | free | 10000 | | | | | |
+| serving | 131072 | 32 | tiny | alloc | 10000 | | | | | |
+| serving | 131072 | 32 | tiny | free | 10000 | | | | | |
+| control | 4096 | 1 | nano | alloc | 10000 | | | | | |
+| control | 4096 | 1 | nano | free | 10000 | | | | | |
+| control | 32768 | 8 | nano | alloc | 10000 | | | | | |
+| control | 32768 | 8 | nano | free | 10000 | | | | | |
+| control | 65536 | 16 | tiny | alloc | 10000 | | | | | |
+| control | 65536 | 16 | tiny | free | 10000 | | | | | |
+| control | 131072 | 32 | tiny | alloc | 10000 | | | | | |
+| control | 131072 | 32 | tiny | free | 10000 | | | | | |
+
+### Table 3: the verdict figures (fill after both boots)
+
+| figure | theory (replay) | KR12 practice | ceiling |
+|---|---|---|---|
+| nano worst steps | 403 | | 1,056 |
+| tiny worst steps | 61 | | 1,056 |
+| nano alloc ratio_milli, serving | -- | | -- |
+| nano alloc ratio_milli, control | -- | | -- |
+| tiny alloc ratio_milli, serving | -- | | -- |
+| tiny alloc ratio_milli, control | -- | | -- |
+
+### Results (to be filled at the bench)
+
+- (empty until the run)

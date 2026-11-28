@@ -1,0 +1,61 @@
+alloc      1 -> SUCCESS start     31 count      1 steps 4
+alloc      8 -> SUCCESS start     23 count      8 steps 5
+alloc      9 -> SUCCESS start      0 count      9 steps 27
+alloc     32 -> SUCCESS start     32 count     32 steps 37
+alloc     33 -> SUCCESS start     64 count     33 steps 69
+alloc     64 -> SUCCESS start   1024 count     64 steps 67
+alloc     65 -> SUCCESS start    127 count     65 steps 46
+alloc   1024 -> SUCCESS start   1088 count   1024 steps 196
+alloc   1025 -> SUCCESS start   3071 count   1025 steps 104
+alloc   5000 -> SUCCESS start   4096 count   5000 steps 550
+alloc      3 -> SUCCESS start     20 count      3 steps 13
+alloc     17 -> SUCCESS start     97 count     17 steps 38
+alloc    100 -> SUCCESS start    192 count    100 steps 53
+alloc   2000 -> SUCCESS start   9096 count   2000 steps 313
+alloc  32767 -> SUCCESS start  32768 count  32767 steps 3257
+alloc  32768 -> SUCCESS start  65536 count  32768 steps 2106
+alloc  40000 -> status 1 steps 4
+alloc     -5 -> status 1 steps 4
+alloc      0 -> status 1 steps 4
+free  slot  0 -> status 8 steps 0
+free  slot  2 -> status 8 steps 0
+free  slot  4 -> status 8 steps 0
+free  slot  6 -> status 8 steps 2
+free  slot  8 -> status 8 steps 62
+free  slot 10 -> status 8 steps 0
+free  slot 12 -> status 8 steps 4
+free  slot 14 -> status 8 steps 2104
+alloc  32768 -> SUCCESS start  98304 count  32768 steps 2106
+alloc   2048 -> SUCCESS start  11264 count   2048 steps 208
+alloc     31 -> SUCCESS start     64 count     31 steps 38
+free  slot  1 -> status 8 steps 0
+free  slot  3 -> status 8 steps 0
+free  slot  5 -> status 8 steps 0
+free  slot  7 -> status 8 steps 60
+free  slot  9 -> status 8 steps 316
+free  slot 11 -> status 8 steps 0
+free  slot 13 -> status 8 steps 124
+free  slot 15 -> status 8 steps 2104
+free  slot 17 -> status 8 steps 124
+free  slot 18 -> status 8 steps 0
+free  slot 17 -> status 4 steps 0
+free  slot 16 -> status 8 steps 2104
+free  slot 15 -> status 4 steps 0
+free  slot 14 -> status 4 steps 0
+free  slot 13 -> status 4 steps 0
+free  slot 12 -> status 4 steps 0
+free  slot 11 -> status 4 steps 0
+free  slot 10 -> status 4 steps 0
+free  slot  9 -> status 4 steps 0
+free  slot  8 -> status 4 steps 0
+free  slot  7 -> status 4 steps 0
+free  slot  6 -> status 4 steps 0
+free  slot  5 -> status 4 steps 0
+free  slot  4 -> status 4 steps 0
+free  slot  3 -> status 4 steps 0
+free  slot  2 -> status 4 steps 0
+free  slot  1 -> status 4 steps 0
+free  slot  0 -> status 4 steps 0
+alloc  32768 -> SUCCESS start      0 count  32768 steps 2105
+alloc      1 -> SUCCESS start  32799 count      1 steps 5
+final count_overall 32769 lead 1

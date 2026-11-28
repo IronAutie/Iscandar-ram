@@ -116,3 +116,18 @@ not do; the check is recorded in the manifest.
   geometry in the engine headers, the mass layout in
   ../MASS-LAYOUT.md. No patch defines a constant of
   its own.
+
+Addendum, 2026-11-27 (Andrew's rulings, as amended the
+same day): patch 0013 (step counters) ships. The shipped
+kernel contains 0001 to 0013. Tests 1 to 11 (KR1 to KR11)
+flew 0001 to 0012; KR12 flies the full set, and its build
+is the shipping build. The counters' engine-text
+additions (counter lines at the simulation's own sites,
+pure additions, no existing line changed) are therefore
+part of the shipped tree, their decisions proven identical
+to the uninstrumented engine at the desk and to be proven
+live at KR12. The count publishes through the Beam.c
+extern iscandar_beam_last_steps (the Beam struct is
+mass-shaped and gains no field), and frees are counted in
+the same per-class step ledgers as allocations, matching
+the cycle ledger's denominator.

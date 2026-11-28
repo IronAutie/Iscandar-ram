@@ -505,3 +505,426 @@ compiled or benched; the bench round runs D0 first
 (the capturing launch, the foreground layer, the dmesg
 read), then the negative, the true boot, and the
 degrade proof. Uncommitted, awaiting Andrew's word.
+
+Resume point, 2026-11-18 22:36, Andrew calling the evening at
+23:00: the fix round is compiled and staged at the bench. Bench
+link-check 12/12 (span-identity included), patch 0008 applied
+clean to the tree, kernel rebuilt (make -j1, ready), payload
+staged by the Task 7 copies of record (binaries unchanged this
+round; the refreshed XML carries the new unit web), ELBE build
+submitted 22:34. Remaining tonight: when the build lands, copy
+the new elbe-build folder's fubuki.img over the launch folder's
+image. Tomorrow's bench, in order: the D0 posture boot under the
+capturing launch (all six units masked, the layer by hand in the
+foreground, dmesg read after), the negative boot, the true boot,
+and the degrade proof. After the fix round benches, the kernel
+build's design draft (doors unchanged, serve moves in-kernel
+behind the record interface). The capturing launch was validated
+as a rig check on the old kernel (log file and socket monitor);
+the old guest was quit before the rebuild, at Andrew's question,
+so the bench never runs two guests on one image.
+
+Filed at Andrew's insistence, 2026-11-18 22:40: the coverage
+audit is not polish. His words: "its unlikely as hell, but it
+only takes one unpatched window." For the kernel round, before
+it boots: enumerate every allocation entry point in the source
+and mark each door'd or deliberately stock, free twin beside it,
+the bulk, node and lru variants named explicitly. One window
+suffices is the same shape as the overlay doctrine: a single
+violation is a hard failure, not a statistic.
+
+D0 RAN, 2026-11-18 late evening (socket-console boot, kernel
+#7 with 0008, image elbe-build-20261118-2238*): the evening's
+central result. Baseline proc read exact under the new kernel
+(state: prefix, self-check PASS, leaked frees line present at
+0). Canary by hand PASS, exit 0. The layer service's journal:
+started 2.54, raised 2.63, serving from 2.63, PID 315, alive
+in its hrtimer_nanosleep poll throughout (ps at 22:59).
+RAISE BY HAND, TWICE (guest t=175.7 and t=751.5): both times
+"bridge timeout, op 4", then the 0008 line "raise:
+registration failed after 0 caches; rolled back, bridge stays
+down", write error ENOSPC, and THE GUEST STAYED ALIVE AND
+USABLE at a shell prompt both times. The confirm-then-commit
+raise and the rollback are PROVEN under fire: the Boot C
+poison is dead.
+The failure itself, isolated by monitor reads of the physical
+control block at 0x1FF80000: after raise 1, req_head 1,
+req_tail 1, resp_tail 1, requests_served 1; after raise 2,
+all four at 2, requests_served 2. The response record at the
+resp ring head (0x1FFA1000): op 4, status 0, the kernel's own
+cache pointer as cookie, registry id 1. THE LAYER ANSWERED
+BOTH REGISTRATIONS, COMPLETELY AND CORRECTLY. The kernel's
+5 s poll never saw resp_tail move inside its window; by the
+time of each monitor read the answer stood in DRAM. The layer
+is exonerated (journal, cursors, response record, ps). The
+defect is a systematic >5 s gap between the layer's answer
+and the kernel poll's observation of it, on the first and
+every registration, in this boot. Two candidate causes filed
+for the desk, in order: (1) the two mappings of the channel
+page differ in cacheability (kernel memremap in 0005/0006 vs
+the /dev/iscandar mmap pgprot in 0006): a WB reader can hold
+a stale line against a UC writer for exactly this shape of
+delay; read both patch texts and compare. (2) timer/tick
+behavior in the window (the sibling guest's clocksource
+"long readout interval" line is on record). Note the forensic
+boot (kernel #6) served 32 registrations with the same
+mapping code, so whichever cause it is, it is conditional,
+not constant.
+Bench lessons of the night, for the run sheet's permanent
+record: the stdio chardev never took the host terminal raw,
+so Ctrl-Z stopped QEMU and Ctrl-C quit it (two lost guests,
+both pre-raise, no evidence lost). The console of record is
+now a socket chardev (127.0.0.1:4321, logfile) reached with
+stty raw + nc (telesart has no socat; Andrew later reported
+logging in "via socat", the client detail is his), the
+monitor on its unix socket, and QEMU's own terminal receives
+no keystrokes. The capturing launch works: console-d0.log on
+the host holds the whole boot.
+Remaining in the fix round's order: the negative boot, the
+true boot (blocked on the visibility defect above), the
+degrade proof. The kernel round's design draft also waits.
+
+## Rig retired, kernel round opened (2026-11-19)
+
+Andrew, 2026-11-19 08:50: "Go ahead. The user land rig
+has served its purpose." The fix round's remaining bench
+items (negative boot, true boot, degrade proof) are
+closed by retirement, not completed; the true boot stays
+blocked on the visibility defect above, which remains on
+the record unfixed and is a channel pathology only. The
+atomicity simulation ran the same morning (atomic-sim/
+REPORT.md): termination table measured, history
+independence checked, sleep-free audit clean. The kernel
+round's design draft is written at build/kernel/
+KERNEL-BUILD-DESIGN-DRAFT.md, rulings at its head,
+awaiting Andrew's stet before any code.
+
+## Run requirement added 2026-11-24 (Andrew)
+
+For the first run carrying patches 0011 and 0012: both ACCOUNT
+landing pads (the alloc-door statement and the free-door statement,
+patch 0012) are to be set as breakpoints as part of the run setup,
+before the boot proceeds. An accounted request reaching a door must
+stop the run at the door, not pass silently. Breakpoint addresses are
+to be resolved from the running build, not from System.map (the KR8
+lesson: the map does not describe the running build's late-image
+layout).
+Interpretation (Andrew, 2026-11-24): a firing breakpoint means code
+somewhere in the kernel wants to do accounting. The follow-up is to
+deduce why (which caller, in what context) and then determine whether
+that use is important enough to keep, that is, whether accounting
+support becomes real work or the exemption stands with the caller
+named.
+Addendum (2026-11-24): patch 0012 is built (commit f061b3c), so the
+pads exist for this run. The alloc seats are guarded by the flag and
+are the operative detectors. The free seats carry no flag to test
+(the free call has none) and are reached by every door free; that is
+their known property going into the run.
+KR9 first ACCOUNT firing (2026-11-24): slab alloc seat, 88-byte
+kzalloc, GFP_KERNEL_ACCOUNT | __GFP_ZERO, from
+__register_sysctl_table for the "user" sysctl set at initcall
+level 4 (user_namespace_sysctl_init). Kernel-policy allocation,
+not tenant consumption; see the day log for the full deduction.
+KR9 outcome (2026-11-24): instrumented boot, gdb census taken,
+systemd fully up, no __process_echoes recurrence (0011's fault
+absent), serial getty lost to a device timeout under the stops.
+Clean confirmation boot on the same image is owed for the login
+and /proc/iscandar readings.
+KR10 readings (2026-11-24): ready; count_overall 69084 (84 fixtures
++ 69000 live pages, exact); live_pages 69000 of 131072; refusals 0;
+violations 0; live_grants 164501 across 194 registered caches;
+gen_pool 1 stock, 3 served. Verdict criterion as fixed in advance
+reads met; wording is Andrew's.
+
+## KR11: first in-kernel exerciser run (prepared 2026-11-25, for Paper 3)
+
+Scope (Andrew, 2026-11-25): Paper 3 stays simple. KR11 is the one
+controlled run: the standard exerciser pattern, predicted versus
+measured, one table for Measurements. Nothing from the distributed
+design enters this run.
+
+Launch: the KR10 line unchanged (six bridge-era units masked,
+wait=on), with two recorded bench-only additions: `nokaslr` (so the
+state section's address is the System.map address, for the monitor
+photographs below) and, if the guest agent is present, its channel
+clause. Logfile console-kr11.log.
+
+Before the run, two checks in the guest:
+- `which qemu-ga` / the agent service state. If the QEMU guest
+  agent is present and its channel is attached, the run is driven
+  from the monitor by guest-exec, as Andrew directed (2026-11-25).
+  If not, the same steps run at the serial console. The evidence
+  is identical either way.
+- `free -m` and `df -h /` (owed readings for the RAM budget).
+
+Procedure:
+1. Boot to login. Take the pre-readings: full /proc/iscandar set.
+2. Photograph A: at the monitor, `stop`, then `memsave` of the
+   .iscandar_state span only (561,424 bytes at its System.map
+   physical address), then `cont`. This is the books, not the
+   arena bytes; the guest is held, not strobed.
+3. Print the prediction sheet without allocating:
+   `iscandar-exerciser ledger-check`. Expected, from
+   paper-3-exerciser-pattern.md (never edited after a run):
+   5,072 allocations and 5,072 frees; peak live 9,216 pages;
+   live after Phase B 6,144 pages; end state 0 pages held.
+4. Run: `/usr/local/sbin/iscandar-exerciser standard`
+   (3 churn cycles). A stamp mismatch at any verification is an
+   invariant violation: the program records it in its ledger,
+   stops, and exits nonzero. No retry.
+5. Take the post-readings: full /proc/iscandar set. Photograph B,
+   same monitor procedure as step 2.
+6. Read the ledger: /var/log/iscandar-exerciser/ledger.txt.
+
+What the comparison is, stated plainly: the prediction sheet
+predicts the exerciser's own pattern, and its stamp checks are
+the overlay test inside its address space. The engine-side check
+is balance and discipline, not a page-for-page delta: refusals 0,
+violations 0, and count_overall returning to its pre-run value
+apart from the run's kernel-side wake (exec, the ledger's file
+traffic), which the pre/post readings itemize. The two
+photographs render from the saved state sections on the host
+(512x256, one pixel per page, fixtures marked).
+
+### KR11 results (run 2026-11-25 evening, a day ahead of the card)
+
+- Route taken: console (no qemu-ga in the image). The ELBE image did NOT
+  carry the exerciser binary (unit files only); a static rebuild
+  (gcc -O2 -static from exerciser/exerciser.c) was carried into the
+  running guest on a 16 MB ext2 image (kr11-drive2.img; the guest kernel
+  has no vfat, and the QEMU launch has no USB controller, so the drive
+  was fronted as virtio-blk-pci and mounted as /dev/vdc) and installed
+  to /usr/local/sbin/iscandar-exerciser (829,992 bytes).
+- RAM readings: free -m total 462, used 37, free 401, buff/cache 32,
+  available 425, swap 0. df -h /: 1.9G, 684M used, 1.1G avail, 38%.
+- Pre-run /proc/iscandar: ready; count_overall 44657 = 84 fixtures +
+  44573 live; lead 1; refusals 0; violations 0; slab_page_calls 254;
+  nano 1,170,192 calls (worst 2,637,858); tiny 8; registry 194
+  registered, 136,944 live grants; gen_pool 1 stock, 3 served.
+- Photograph A: monitor pmemsave of the mass at physical 0x2a46a00
+  (iscandar_mass_start ffffffff82a46a00, mass_end ffffffff82acfb10,
+  span 561,424 bytes), kr11-photo-a.bin in the launch directory,
+  verified 561,424 bytes. (memsave takes a virtual address; pmemsave
+  is the physical form.)
+- The run: invoked with the ledger-check argument, this build executed
+  the standard run itself. Ledger (guest: /root/iscandar-exerciser-
+  ledger.txt; the /var/log path belongs to the service route):
+  prediction 5,072 allocations / 5,072 frees, peak live 9,216 pages,
+  6,144 after Phase B, end state 0. Actual identical, class by class,
+  both sides. Phase A: 2,048 blocks, 9,216 live. Phase B: 1,040
+  blocks, 6,144 live. Phase C cycles 1-3: 1,040 blocks, 6,144 live.
+  Phase D: 0 blocks, 0 pages. Result line: run complete, actual
+  matches prediction, balanced, end state zero.
+- Post-run /proc/iscandar: ready; count_overall 96,320 = 84 + 96,236
+  live; lead 3; refusals 0; violations 0; slab_page_calls 254; nano
+  2,074,289 calls; registry 194, live grants 214,753; gen_pool
+  unchanged. The +51,663 live pages over baseline are kernel-side wake
+  in the interval (the full-filesystem find filling slab-served
+  dentry/inode caches is the largest named cause; two drive mounts and
+  the install also contributed); the exerciser's own account balances
+  to zero by its stamps and ledger.
+- Photograph B: kr11-photo-b.bin, 561,424 bytes, launch directory.
+- Paper 3 evidence is complete per the 2026-11-25 scope ruling:
+  KR10 (clean boot, engine serving) + KR11 (predicted working set,
+  matched exactly, zero refusals, zero violations).
+
+## KR12: step statistics and the cycles control (stetted 2026-11-27, for Paper 3)
+
+Status: DRAFT for Andrew's check. Nothing here has been run.
+Patch 0013 is final (step counters). The harness is a draft in
+kr12-scratch/harness/. This sheet is not yet part of
+BENCH-RUN-SHEET.md; it moves there on Andrew's stet.
+
+Scope (Andrew, 2026-11-27): two questions KR11 left open.
+First, the step guarantee has only ever been measured in the
+userland replay (Paper 2, theory); KR12 measures it in the
+running kernel (this paper, practice): patch 0013 counts the
+engine's steps at the sim's own sites and /proc/iscandar gains
+total_steps and worst_steps per class. Second, the timing
+figures have no denominator: KR12 runs a control, the SAME
+kernel binary booted with the layer held shut (stock serves),
+and times NANO and TINY door calls in both boots with one
+harness. The comparison is timing VARIANCE, not speed: which
+server's distribution is tighter, stated as the
+worst-to-median ratio. Stock is expected to post the lower
+medians. That is in the prediction, not discovered afterward.
+
+The kernel: build of record (0001-0012) plus 0013, one binary
+for both boots. Boot A serves. Boot B is the same binary with
+`iscandar_hold` appended to the kernel command line: core.c's
+init takes the hold branch before the canary, prints
+"iscandar: held shut by iscandar_hold; stock serves", and
+every door serves stock for the boot (the KR2 closed state,
+arrived at by parameter rather than by refusal). No second
+build, no config delta: the control differs from the
+experimental boot by one boot flag and nothing else.
+
+Launch: the KR10/KR11 line unchanged (six bridge-era units
+masked, serial socket wait=on, monitor unix socket, -display
+none), plus `nokaslr` as at KR11. Logfiles console-kr12a.log
+(Boot A) and console-kr12b.log (Boot B). Boot B adds
+`iscandar_hold` to the kernel command line; nothing else in
+the launch changes. The carry-in drive (below) is attached
+for both boots.
+
+Preparation (host, telesart, in order):
+
+1. Apply patch 0013 to the bench tree and rebuild in the
+   FOREGROUND (the bench rule). Expected: clean build; the
+   link check still reads .iscandar_state 561,424 bytes
+   (0013 adds no mass: its ledgers are ordinary statics in
+   core.c, and the Beam struct is untouched by design).
+2. Build the harness against the same tree:
+   `make -C ~/linux-6.12.116-kr M=<kr12-scratch/harness> modules`
+   Expected: iscandar_cycles_harness.ko, no warnings. Run
+   `modinfo -F vermagic` on it and compare with the guest's
+   `uname -r` once booted: they must be equal before insmod
+   is attempted. (Desk check on the VM: the module's object
+   compiles clean against the staged tree; modpost could not
+   complete there because the copied tree carries no
+   Module.symvers. On telesart the build tree has its own
+   symvers and the link completes. Every symbol the module
+   uses is a stock export; it links against no Iscandar
+   symbol.)
+3. Make the carry-in image, kr12-drive.img, 16 MB ext2 as at
+   KR11, holding two files: iscandar_cycles_harness.ko and
+   the exerciser binary (the KR11 static build, for Boot A's
+   standard run). Attach as virtio-blk-pci as at KR11
+   (guest sees /dev/vdc).
+
+Before either boot, two checks in the guest (Boot A serves
+for these; they are image facts, not boot facts):
+- Module loading exists in this image: `command -v insmod`,
+  and if that is empty, `command -v busybox` (busybox insmod
+  serves). Also `cat /proc/sys/kernel/modules_disabled`
+  must read 0. If all of these fail, STOP: the fallback is a
+  built-in harness (see HARNESS-NOTE.md), which is a separate
+  patch and Andrew's ruling, not a bench improvisation.
+- `free -m` and `df -h /` (the RAM budget readings, as at
+  KR11).
+
+Boot A procedure (serving; the steps of record):
+
+1. Boot to login on the plain KR12 line (no hold). Console
+   must show "iscandar: ready". Take the pre-readings: full
+   /proc/iscandar set, copied whole. The class lines now read
+   `class %s calls %llu worst_cycles %llu total_steps %llu
+   worst_steps %llu`.
+2. Mount the carry-in drive; install the exerciser to
+   /usr/local/sbin/ as at KR11. Do NOT insmod the harness yet.
+3. Print the prediction sheet (`iscandar-exerciser
+   ledger-check`), then the standard run, as at KR11.
+4. Take the post-exerciser readings: full /proc/iscandar set.
+   THESE are the step readings of record: total_steps and
+   worst_steps per class cover the boot and the exerciser
+   together, the same population KR11's worst_cycles covered.
+   Fill Table 1 from the pre and post sets.
+5. Only now the harness: `insmod iscandar_cycles_harness.ko`,
+   then `echo run > /proc/iscandar_cycles_harness`. Expected:
+   ten ICH1 lines in the console log (header, 4 sizes x
+   alloc/free, done), header reading boot=serving and
+   state="state ready". Fill Table 2, Boot A rows.
+6. Take a final /proc/iscandar reading and keep it, labelled
+   harness-inclusive: the harness's own 44,000 door calls
+   (11,000 pairs x 4 sizes) are inside its deltas, by design
+   and on the record, not subtracted anywhere.
+7. `rmmod iscandar_cycles_harness`. Power off clean.
+
+Boot B procedure (control; harness only):
+
+1. Boot the SAME kernel and image with `iscandar_hold`
+   appended. Console must show "iscandar: held shut by
+   iscandar_hold; stock serves". Take /proc/iscandar: first
+   line must read "state closed". If it reads ready, STOP:
+   the control is not a control.
+2. `free -m` (symmetry with Boot A).
+3. Mount the carry-in drive. `insmod
+   iscandar_cycles_harness.ko` (the same .ko; same kernel),
+   then `echo run > /proc/iscandar_cycles_harness`. Expected:
+   ten ICH1 lines, header reading boot=control and
+   state="state closed". The harness reads its label from
+   /proc/iscandar itself; a header that says serving ends
+   the run as mislabelled evidence. Fill Table 2, Boot B rows.
+4. No exerciser run in this boot: against stock it would
+   measure the guest's libc malloc, which is not a party to
+   the comparison.
+5. `rmmod`, power off clean.
+
+The prediction, stated in advance (Andrew's terms):
+
+- Boot A decisions identical to KR11: exerciser prediction
+  matched class by class, refusals 0, violations 0.
+- Step worsts, nano and tiny, in the order of the replay
+  trace's worsts (nano 403, tiny 61) and under the per-cube
+  ceiling of 1,056. A worst above the ceiling in any class
+  falsifies the composition, not just the run.
+- Cycles: the control's medians at the vmalloc door are
+  expected LOWER than Fubuki's (the stock page allocator's
+  fast paths are the optimized incumbent; nothing in the
+  layer's design disputes this). The control's
+  worst-to-median ratios are expected to run long; Fubuki's
+  ratios are expected near 1 by comparison, its worst
+  sitting close to its median, because its cost is a bounded
+  walk whose length the step counters have just measured.
+  The paper's claim rides on the ratios, not the medians.
+
+What the comparison is, stated plainly: the step table sets
+the replay's theory beside the kernel's practice in the
+theory's own unit, counted at the same loop sites. The
+cycles table sets two servers of one door beside each other
+under one harness, one binary, one image, differing only in
+a boot flag. Neither table is a speed claim. The first says
+the guarantee was measured where it was promised; the
+second says what the guarantee costs and buys in time:
+a median conceded, a tail refused.
+
+### Table 1: Boot A step readings (fill from /proc/iscandar)
+
+| class | calls pre | calls post | worst_cycles post | total_steps post | worst_steps post | mean steps (total/calls) |
+|---|---|---|---|---|---|---|
+| nano | | | | | | |
+| tiny | | | | | | |
+| small | | | | | | |
+| large | | | | | | |
+| huge | | | | | | |
+| cubecheck | | | | | | |
+
+Also record, as at KR11: state, count_overall pre/post,
+refusals, violations, slab_page_calls, registry, gen_pool,
+lead pre/post.
+
+### Table 2: cycles harness (fill from the ICH1 lines)
+
+| boot | size | pages | class | op | n | min | median | mean | worst | ratio_milli |
+|---|---|---|---|---|---|---|---|---|---|---|
+| serving | 4096 | 1 | nano | alloc | 10000 | | | | | |
+| serving | 4096 | 1 | nano | free | 10000 | | | | | |
+| serving | 32768 | 8 | nano | alloc | 10000 | | | | | |
+| serving | 32768 | 8 | nano | free | 10000 | | | | | |
+| serving | 65536 | 16 | tiny | alloc | 10000 | | | | | |
+| serving | 65536 | 16 | tiny | free | 10000 | | | | | |
+| serving | 131072 | 32 | tiny | alloc | 10000 | | | | | |
+| serving | 131072 | 32 | tiny | free | 10000 | | | | | |
+| control | 4096 | 1 | nano | alloc | 10000 | | | | | |
+| control | 4096 | 1 | nano | free | 10000 | | | | | |
+| control | 32768 | 8 | nano | alloc | 10000 | | | | | |
+| control | 32768 | 8 | nano | free | 10000 | | | | | |
+| control | 65536 | 16 | tiny | alloc | 10000 | | | | | |
+| control | 65536 | 16 | tiny | free | 10000 | | | | | |
+| control | 131072 | 32 | tiny | alloc | 10000 | | | | | |
+| control | 131072 | 32 | tiny | free | 10000 | | | | | |
+
+### Table 3: the verdict figures (fill after both boots)
+
+| figure | theory (replay) | KR12 practice | ceiling |
+|---|---|---|---|
+| nano worst steps | 403 | | 1,056 |
+| tiny worst steps | 61 | | 1,056 |
+| nano alloc ratio_milli, serving | -- | | -- |
+| nano alloc ratio_milli, control | -- | | -- |
+| tiny alloc ratio_milli, serving | -- | | -- |
+| tiny alloc ratio_milli, control | -- | | -- |
+
+### Results (to be filled at the bench)
+
+- (empty until the run)
